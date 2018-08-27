@@ -86,6 +86,10 @@ import  argparse
 import  subprocess
 import  tempfile
 
+# don't load if we are in Xcode since it is not compatible and will block Xcode
+if os.getenv('PATH').startswith('/Applications/Xcode'):
+    return
+
 try:
     from keystone import *
     CONFIG_KEYSTONE_AVAILABLE = 1
