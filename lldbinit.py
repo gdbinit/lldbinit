@@ -88,7 +88,7 @@ import  tempfile
 
 # don't load if we are in Xcode since it is not compatible and will block Xcode
 if os.getenv('PATH').startswith('/Applications/Xcode'):
-    return
+    exit(0)
 
 try:
     from keystone import *
