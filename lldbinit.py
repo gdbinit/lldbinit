@@ -1,9 +1,9 @@
 '''
 .____    .____     ________ __________.__ _______  ._____________
 |    |   |    |    \______ \\______   \__|\      \ |__\__    ___/
-|    |   |    |     |    |  \|    |  _/  |/   |   \|  | |    |   
-|    |___|    |___  |    `   \    |   \  /    |    \  | |    |   
-|_______ \_______ \/_______  /______  /__\____|__  /__| |____|   
+|    |   |    |     |    |  \|    |  _/  |/   |   \|  | |    |
+|    |___|    |___  |    `   \    |   \  /    |    \  | |    |
+|_______ \_______ \/_______  /______  /__\____|__  /__| |____|
         \/       \/        \/       \/           \/              LLDBINIT v1.0
 
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
@@ -53,7 +53,7 @@ BUGS:
 - Disassembler output with API GetInstructions is all wrong for code not in main executable
 The reason is that the section information is bad
     context = frame.GetSymbolContext(lldb.eSymbolContextEverything)
-    print context
+    print(context)
      Module: file = "/usr/lib/system/libsystem_blocks.dylib", arch = "x86_64"
      Symbol: id = {0x0000000e}, range = [0x00000000000008ec-0x000000000000096c), mangled="_Block_release"
     So even if we pass the correct base_addr the disassembly will be all wrong
@@ -88,7 +88,7 @@ import  tempfile
 
 # don't load if we are in Xcode since it is not compatible and will block Xcode
 if os.getenv('PATH').startswith('/Applications/Xcode'):
-    return
+    exit()
 
 try:
     from keystone import *
@@ -207,17 +207,17 @@ def __lldb_init_module(debugger, internal_dict):
     '''
 
     '''
-    If I'm running from $HOME where .lldbinit is located, seems like lldb will load 
+    If I'm running from $HOME where .lldbinit is located, seems like lldb will load
     .lldbinit 2 times, thus this dirty hack is here to prevent doulbe loading...
     if somebody knows better way, would be great to know :)
-    ''' 
+    '''
     var = lldb.debugger.GetInternalVariableValue("stop-disassembly-count", lldb.debugger.GetInstanceName())
     if var.IsValid():
         var = var.GetStringAtIndex(0)
         if var == "0":
             return
     res = lldb.SBCommandReturnObject()
-    
+
     # settings
     lldb.debugger.GetCommandInterpreter().HandleCommand("settings set target.x86-disassembly-flavor intel", res)
     lldb.debugger.GetCommandInterpreter().HandleCommand("settings set prompt \"(lldbinit) \"", res)
@@ -350,7 +350,7 @@ def __lldb_init_module(debugger, internal_dict):
         lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.armthumb armthumb", res)
     # add the hook - we don't need to wait for a target to be loaded
     lldb.debugger.GetCommandInterpreter().HandleCommand("target stop-hook add -o \"HandleHookStopOnTarget\"", res)
-    
+
     return
 
 def lldbinitcmds(debugger, command, result, dict):
@@ -402,16 +402,16 @@ def lldbinitcmds(debugger, command, result, dict):
     [ "arm32/arm64/armthumb", "ARM assembler using keystone" ]
     ]
 
-    print "lldbinit available commands:"
+    print("lldbinit available commands:")
 
     for row in help_table:
         print(" {: <20} - {: <30}".format(*row))
 
-    print "\nUse \'cmdname help\' for extended command help."
+    print("\nUse \'cmdname help\' for extended command help.")
 
 # placeholder to make tests
 def tester(debugger, command, result, dict):
-    print "test"
+    print("test")
     #frame = get_frame()
     # the SBValue to ReturnFromFrame must be eValueTypeRegister type
     # if we do a lldb.SBValue() we can't set to that type
@@ -449,34 +449,34 @@ Available settings:
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: command requires arguments."
-        print ""
-        print help
+        print("[-] error: command requires arguments.")
+        print("")
+        print(help)
         return
 
     if cmd[0] == "color":
         CONFIG_ENABLE_COLOR = 1
-        print "[+] Enabled color mode."
+        print("[+] Enabled color mode.")
     elif cmd[0] == "solib":
         debugger.HandleCommand("settings set target.process.stop-on-sharedlibrary-events true")
-        print "[+] Enabled stop on library events trick."
+        print("[+] Enabled stop on library events trick.")
     elif cmd[0] == "aslr:":
         debugger.HandleCommand("settings set target.disable-aslr false")
-        print "[+] Enabled ASLR."
+        print("[+] Enabled ASLR.")
     elif cmd[0] == "stackwin":
         CONFIG_DISPLAY_STACK_WINDOW = 1
-        print "[+] Enabled stack window in context display."
+        print("[+] Enabled stack window in context display.")
     elif cmd[0] == "flow":
         CONFIG_DISPLAY_FLOW_WINDOW = 1
-        print "[+] Enabled indirect control flow window in context display."
+        print("[+] Enabled indirect control flow window in context display.")
     elif cmd[0] == "datawin":
         CONFIG_DISPLAY_DATA_WINDOW = 1
-        print "[+] Enabled data window in context display. Configure address with \'datawin\' cmd."
+        print("[+] Enabled data window in context display. Configure address with \'datawin\' cmd.")
     elif cmd[0] == "help":
-        print help
+        print(help)
     else:
-        print "[-] error: unrecognized command."
-        print help
+        print("[-] error: unrecognized command.")
+        print(help)
 
     return
 
@@ -503,38 +503,38 @@ Available settings:
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: command requires arguments."
-        print ""
-        print help
+        print("[-] error: command requires arguments.")
+        print("")
+        print(help)
         return
 
     if cmd[0] == "color":
         CONFIG_ENABLE_COLOR = 0
-        print "[+] Disabled color mode."
+        print("[+] Disabled color mode.")
     elif cmd[0] == "solib":
         debugger.HandleCommand("settings set target.process.stop-on-sharedlibrary-events false")
-        print "[+] Disabled stop on library events trick."
+        print("[+] Disabled stop on library events trick.")
     elif cmd[0] == "aslr":
         debugger.HandleCommand("settings set target.disable-aslr true")
-        print "[+] Disabled ASLR."
+        print("[+] Disabled ASLR.")
     elif cmd[0] == "stackwin":
         CONFIG_DISPLAY_STACK_WINDOW = 0
-        print "[+] Disabled stack window in context display."
+        print("[+] Disabled stack window in context display.")
     elif cmd[0] == "flow":
         CONFIG_DISPLAY_FLOW_WINDOW = 0
-        print "[+] Disabled indirect control flow window in context display."
+        print("[+] Disabled indirect control flow window in context display.")
     elif cmd[0] == "datawin":
         CONFIG_DISPLAY_DATA_WINDOW = 0
-        print "[+] Disabled data window in context display."
+        print("[+] Disabled data window in context display.")
     elif cmd[0] == "help":
-        print help
+        print(help)
     else:
-        print "[-] error: unrecognized command."
-        print help
+        print("[-] error: unrecognized command.")
+        print(help)
 
     return
 
-def contextcodesize(debugger, command, result, dict): 
+def contextcodesize(debugger, command, result, dict):
     '''Set the number of disassembly lines in code window. Use \'contextcodesize help\' for more information.'''
     help = """
 Configures the number of disassembly lines displayed in code window.
@@ -548,20 +548,20 @@ Note: expressions supported, do not use spaces between operators.
 
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert the number of disassembly lines to display."
-        print ""
-        print help
+        print("[-] error: please insert the number of disassembly lines to display.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
-        print "\nCurrent configuration value is: %d" % CONFIG_DISASSEMBLY_LINE_COUNT
+        print(help)
+        print("\nCurrent configuration value is: %d" % CONFIG_DISASSEMBLY_LINE_COUNT)
         return
-    
+
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid input value."
-        print ""
-        print help
+        print("[-] error: invalid input value.")
+        print("")
+        print(help)
         return
 
     CONFIG_DISASSEMBLY_LINE_COUNT = value
@@ -598,7 +598,7 @@ def color(x):
     if CONFIG_ENABLE_COLOR == 0:
         output(out_col)
         return
-            
+
     if x == BLACK:
         out_col = "\033[30m"
     elif x == RED:
@@ -643,38 +643,38 @@ Note: expressions supported, do not use spaces between operators.
 
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert a breakpoint address."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
+        print(help)
         return
-    
+
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid input value."
-        print ""
-        print help
+        print("[-] error: invalid input value.")
+        print("")
+        print(help)
         return
-    
+
     target = get_target()
     breakpoint = target.BreakpointCreateByAddress(value)
     breakpoint.SetOneShot(True)
     breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
 
-    print "[+] Set temporary breakpoint at 0x{:x}".format(value)
-    
+    print("[+] Set temporary breakpoint at 0x{:x}".format(value))
+
 # hardware breakpoint
 def bhb(debugger, command, result, dict):
     '''Set a hardware breakpoint'''
-    print "[-] error: lldb has no x86/x64 hardware breakpoints implementation."
+    print("[-] error: lldb has no x86/x64 hardware breakpoints implementation.")
     return
 
 # temporary hardware breakpoint
 def bht(debugger, command, result, dict):
     '''Set a temporary hardware breakpoint'''
-    print "[-] error: lldb has no x86/x64 hardware breakpoints implementation."
+    print("[-] error: lldb has no x86/x64 hardware breakpoints implementation.")
     return
 
 # clear breakpoint number
@@ -688,36 +688,36 @@ Syntax: bpc <breakpoint_number>
 Note: only breakpoint numbers are valid, not addresses. Use \'bpl\' to list breakpoints.
 Note: expressions supported, do not use spaces between operators.
 """
-        
+
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert a breakpoint number."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint number.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
+        print(help)
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid input value - only a breakpoint number is valid."
-        print ""
-        print help
+        print("[-] error: invalid input value - only a breakpoint number is valid.")
+        print("")
+        print(help)
         return
-    
+
     target = get_target()
 
     for bpt in target.breakpoint_iter():
         if bpt.id == value:
             if target.BreakpointDelete(bpt.id) == False:
-                print "[-] error: failed to delete breakpoint #{:d}".format(value)
+                print("[-] error: failed to delete breakpoint #{:d}".format(value))
                 return
-            print "[+] Deleted breakpoint #{:d}".format(value)
+            print("[+] Deleted breakpoint #{:d}".format(value))
             return
 
-    print "[-] error: breakpoint #{:d} not found".format(value)
+    print("[-] error: breakpoint #{:d} not found".format(value))
     return
 
 # disable breakpoint number
@@ -732,31 +732,31 @@ Syntax: bpd <breakpoint_number>
 Note: only breakpoint numbers are valid, not addresses. Use \'bpl\' to list breakpoints.
 Note: expressions supported, do not use spaces between operators.
 """
-        
+
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert a breakpoint number."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint number.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
+        print(help)
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid input value - only a breakpoint number is valid."
-        print ""
-        print help
+        print("[-] error: invalid input value - only a breakpoint number is valid.")
+        print("")
+        print(help)
         return
-    
+
     target = get_target()
 
     for bpt in target.breakpoint_iter():
         if bpt.id == value and bpt.IsEnabled() == True:
             bpt.SetEnabled(False)
-            print "[+] Disabled breakpoint #{:d}".format(value)
+            print("[+] Disabled breakpoint #{:d}".format(value))
 
 # disable all breakpoints
 def bpda(debugger, command, result, dict):
@@ -766,23 +766,23 @@ Disable all breakpoints.
 
 Syntax: bpda
 """
-        
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     target = get_target()
 
     if target.DisableAllBreakpoints() == False:
-        print "[-] error: failed to disable all breakpoints."
+        print("[-] error: failed to disable all breakpoints.")
 
-    print "[+] Disabled all breakpoints."
+    print("[+] Disabled all breakpoints.")
 
 # enable breakpoint number
 def bpe(debugger, command, result, dict):
@@ -795,31 +795,31 @@ Syntax: bpe <breakpoint_number>
 Note: only breakpoint numbers are valid, not addresses. Use \'bpl\' to list breakpoints.
 Note: expressions supported, do not use spaces between operators.
 """
-        
+
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert a breakpoint number."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint number.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
+        print(help)
         return
 
     # breakpoint enable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid input value - only a breakpoint number is valid."
-        print ""
-        print help
+        print("[-] error: invalid input value - only a breakpoint number is valid.")
+        print("")
+        print(help)
         return
-    
+
     target = get_target()
 
     for bpt in target.breakpoint_iter():
         if bpt.id == value and bpt.IsEnabled() == False:
             bpt.SetEnabled(True)
-            print "[+] Enabled breakpoint #{:d}".format(value)
+            print("[+] Enabled breakpoint #{:d}".format(value))
 
 # enable all breakpoints
 def bpea(debugger, command, result, dict):
@@ -829,23 +829,23 @@ Enable all breakpoints.
 
 Syntax: bpea
 """
-        
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     target = get_target()
 
     if target.EnableAllBreakpoints() == False:
-        print "[-] error: failed to enable all breakpoints."
+        print("[-] error: failed to enable all breakpoints.")
 
-    print "[+] Enabled all breakpoints."
+    print("[+] Enabled all breakpoints.")
 
 # skip current instruction - just advances PC to next instruction but doesn't execute it
 def skip(debugger, command, result, dict):
@@ -861,16 +861,16 @@ Note: control flow is not respected, it advances to next instruction in memory.
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     start_addr = get_current_pc()
     next_addr = start_addr + get_inst_size(start_addr)
-    
+
     if is_x64():
         get_frame().reg["rip"].value = format(next_addr, '#x')
     elif is_i386():
@@ -901,42 +901,42 @@ Note: expressions supported, do not use spaces between operators.
     if len(cmd) == 0:
         int3_addr = get_current_pc()
         if int3_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        
+
         int3_addr = evaluate(cmd[0])
         if int3_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a breakpoint address."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
         return
 
     bytes_string = target.GetProcess().ReadMemory(int3_addr, 1, error)
     if error.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % int3_addr
+        print("[-] error: Failed to read memory at 0x%x." % int3_addr)
         return
 
     bytes_read = bytearray(bytes_string)
-    
+
     patch_bytes = str('\xCC')
     result = target.GetProcess().WriteMemory(int3_addr, patch_bytes, error)
     if error.Success() == False:
-        print "[-] error: Failed to write memory at 0x%x." % int3_addr
+        print("[-] error: Failed to write memory at 0x%x." % int3_addr)
         return
 
     # save original bytes for later restore
     Int3Dictionary[str(int3_addr)] = bytes_read[0]
 
-    print "[+] Patched INT3 at 0x%x" % int3_addr
+    print("[+] Patched INT3 at 0x%x" % int3_addr)
     return
 
 def rint3(debugger, command, result, dict):
@@ -953,57 +953,57 @@ Note: expressions supported, do not use spaces between operators.
 
     error = lldb.SBError()
     target = get_target()
-    
+
     cmd = command.split()
     # if empty insert a int3 at current PC
     if len(cmd) == 0:
         int3_addr = get_current_pc()
         if int3_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
         int3_addr = evaluate(cmd[0])
         if int3_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
-            return        
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
+            return
     else:
-        print "[-] error: please insert a INT3 patched address."
-        print ""
-        print help
+        print("[-] error: please insert a INT3 patched address.")
+        print("")
+        print(help)
         return
 
     if len(Int3Dictionary) == 0:
-        print "[-] error: No INT3 patched addresses to restore available."
+        print("[-] error: No INT3 patched addresses to restore available.")
         return
 
     bytes_string = target.GetProcess().ReadMemory(int3_addr, 1, error)
     if error.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % int3_addr
+        print("[-] error: Failed to read memory at 0x%x." % int3_addr)
         return
-        
+
     bytes_read = bytearray(bytes_string)
 
     if bytes_read[0] == 0xCC:
-        #print "Found byte patched byte at 0x%x" % int3_addr
+        #print("Found byte patched byte at 0x%x" % int3_addr)
         try:
             original_byte = Int3Dictionary[str(int3_addr)]
         except:
-            print "[-] error: Original byte for address 0x%x not found." % int3_addr
+            print("[-] error: Original byte for address 0x%x not found." % int3_addr)
             return
         patch_bytes = chr(original_byte)
         result = target.GetProcess().WriteMemory(int3_addr, patch_bytes, error)
         if error.Success() == False:
-            print "[-] error: Failed to write memory at 0x%x." % int3_addr
+            print("[-] error: Failed to write memory at 0x%x." % int3_addr)
             return
         # remove element from original bytes list
         del Int3Dictionary[str(int3_addr)]
     else:
-        print "[-] error: No INT3 patch found at 0x%x." % int3_addr
+        print("[-] error: No INT3 patch found at 0x%x." % int3_addr)
 
     return
 
@@ -1018,20 +1018,20 @@ Syntax: listint3
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     if len(Int3Dictionary) == 0:
-        print "[-] No INT3 patched addresses available."
+        print("[-] No INT3 patched addresses available.")
         return
 
-    print "Current INT3 patched addresses:"
+    print("Current INT3 patched addresses:")
     for address, byte in Int3Dictionary.items():
-        print "[*] %s" % hex(int(address, 10))
+        print("[*] %s" % hex(int(address, 10)))
 
     return
 
@@ -1054,34 +1054,34 @@ Note: expressions supported, do not use spaces between operators.
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        
+
         nop_addr = evaluate(cmd[0])
         patch_size = 1
         if nop_addr == None:
-            print "[-] error: invalid address value."
-            print ""
-            print help
+            print("[-] error: invalid address value.")
+            print("")
+            print(help)
             return
     elif len(cmd) == 2:
         nop_addr = evaluate(cmd[0])
         if nop_addr == None:
-            print "[-] error: invalid address value."
-            print ""
-            print help
+            print("[-] error: invalid address value.")
+            print("")
+            print(help)
             return
-        
+
         patch_size = evaluate(cmd[1])
         if patch_size == None:
-            print "[-] error: invalid size value."
-            print ""
-            print help
+            print("[-] error: invalid size value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a breakpoint address."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
         return
 
     current_patch_addr = nop_addr
@@ -1091,7 +1091,7 @@ Note: expressions supported, do not use spaces between operators.
     for i in xrange(patch_size):
         result = target.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
         if error.Success() == False:
-            print "[-] error: Failed to write memory at 0x%x." % current_patch_addr
+            print("[-] error: Failed to write memory at 0x%x." % current_patch_addr)
             return
         current_patch_addr = current_patch_addr + 1
 
@@ -1114,32 +1114,32 @@ Note: expressions supported, do not use spaces between operators.
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
-           print help
-           return        
+           print(help)
+           return
         null_addr = evaluate(cmd[0])
         patch_size = 1
         if null_addr == None:
-            print "[-] error: invalid address value."
-            print ""
-            print help
+            print("[-] error: invalid address value.")
+            print("")
+            print(help)
             return
     elif len(cmd) == 2:
         null_addr = evaluate(cmd[0])
         if null_addr == None:
-            print "[-] error: invalid address value."
-            print ""
-            print help
+            print("[-] error: invalid address value.")
+            print("")
+            print(help)
             return
         patch_size = evaluate(cmd[1])
         if patch_size == None:
-            print "[-] error: invalid size value."
-            print ""
-            print help
+            print("[-] error: invalid size value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a breakpoint address."
-        print ""
-        print help
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
         return
 
     current_patch_addr = null_addr
@@ -1149,14 +1149,14 @@ Note: expressions supported, do not use spaces between operators.
     for i in xrange(patch_size):
         result = target.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
         if error.Success() == False:
-            print "[-] error: Failed to write memory at 0x%x." % current_patch_addr
+            print("[-] error: Failed to write memory at 0x%x." % current_patch_addr)
             return
         current_patch_addr = current_patch_addr + 1
 
     return
 
 '''
-    Implements stepover instruction.    
+    Implements stepover instruction.
 '''
 def stepo(debugger, command, result, dict):
     '''Step over calls and some other instructions so we don't need to step into them. Use \'stepo help\' for more information.'''
@@ -1169,15 +1169,15 @@ Syntax: stepo
 
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     global arm_type
     debugger.SetAsync(True)
     arch = get_arch()
-            
+
     target = get_target()
-        
+
     if is_arm():
         cpsr = get_gp_register("cpsr")
         t = (cpsr >> 5) & 1
@@ -1190,7 +1190,7 @@ Syntax: stepo
     # compute the next address where to breakpoint
     pc_addr = get_current_pc()
     if pc_addr == 0:
-        print "[-] error: invalid current address."
+        print("[-] error: invalid current address.")
         return
 
     next_addr = pc_addr + get_inst_size(pc_addr)
@@ -1230,7 +1230,7 @@ def LoadBreakPointsRva(debugger, command, result, dict):
         #for x in range (0, nummods):
         #       mod = target.GetModuleAtIndex(x);
         #       #print(dir(mod));
-        #       print(target.GetModuleAtIndex(x));              
+        #       print(target.GetModuleAtIndex(x));
         #       for sec in mod.section_iter():
         #               addr = sec.GetLoadAddress(target);
         #               name = sec.GetName();
@@ -1261,10 +1261,10 @@ def LoadBreakPointsRva(debugger, command, result, dict):
         return
     while True:
         line = f.readline()
-        if not line: 
+        if not line:
             break
         line = line.rstrip()
-        if not line: 
+        if not line:
             break
         debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + long(line, 16)))
     f.close()
@@ -1305,22 +1305,22 @@ Note: control flow is not respected, it breakpoints next instruction in memory.
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     target = get_target()
     start_addr = get_current_pc()
     next_addr = start_addr + get_inst_size(start_addr)
-    
+
     breakpoint = target.BreakpointCreateByAddress(next_addr)
     breakpoint.SetOneShot(True)
     breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
 
-    print "[+] Set temporary breakpoint at 0x%x" % next_addr
+    print("[+] Set temporary breakpoint at 0x%x" % next_addr)
 
 # command that sets rax to 1 or 0 and returns right away from current function
 # technically just a shortcut to "thread return"
@@ -1337,20 +1337,20 @@ You probably want to use this at the top of the function you want to return from
 
     cmd = command.split()
     if len(cmd) != 1:
-        print "[-] error: please insert a return value."
-        print ""
-        print help
+        print("[-] error: please insert a return value.")
+        print("")
+        print(help)
         return
     if cmd[0] == "help":
-        print help
+        print(help)
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
     if value == None:
-        print "[-] error: invalid return value."
-        print ""
-        print help
+        print("[-] error: invalid return value.")
+        print("")
+        print(help)
         return
 
     frame = get_frame()
@@ -1379,37 +1379,37 @@ Sets rax/eax to return value and returns immediately from current function where
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: please check required arguments."
-        print ""
-        print help
+        print("[-] error: please check required arguments.")
+        print("")
+        print(help)
         return
     elif len(cmd) > 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
     elif len(cmd) < 2:
-        print "[-] error: please check required arguments."
-        print ""
-        print help
-        return        
+        print("[-] error: please check required arguments.")
+        print("")
+        print(help)
+        return
 
     # XXX: is there a way to verify if address is valid? or just let lldb error when setting the breakpoint
     address = evaluate(cmd[0])
     if address == None:
-        print "[-] error: invalid address value."
-        print ""
-        print help
+        print("[-] error: invalid address value.")
+        print("")
+        print(help)
         return
-    
+
     return_value = evaluate(cmd[1])
     if return_value == None:
-        print "[-] error: invalid return value."
-        print ""
-        print help
+        print("[-] error: invalid return value.")
+        print("")
+        print(help)
         return
-    
+
     for tmp_entry in crack_cmds:
         if tmp_entry['address'] == address:
-            print "[-] error: address already contains a crack command."
+            print("[-] error: address already contains a crack command.")
             return
 
     # set a new entry so we can deal with it in the callback
@@ -1429,7 +1429,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
     global crack_cmds
     # retrieve address we just hit
     current_bp = bp_loc.GetLoadAddress()
-    print "[+] warning: hit crack command breakpoint at 0x{:x}".format(current_bp)
+    print("[+] warning: hit crack command breakpoint at 0x{:x}".format(current_bp))
 
     crack_entry = None
     for tmp_entry in crack_cmds:
@@ -1438,7 +1438,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
             break
 
     if crack_entry == None:
-        print "[-] error: current breakpoint not found in list."
+        print("[-] error: current breakpoint not found in list.")
         return
 
     # we can just set the register in the frame and return empty SBValue
@@ -1447,7 +1447,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
     elif is_i386() == True:
         frame.reg["eax"].value = str(crack_entry['return_value']).rstrip('L')
     else:
-        print "[-] error: unsupported architecture."
+        print("[-] error: unsupported architecture.")
         return
 
     get_thread().ReturnFromFrame(frame, lldb.SBValue())
@@ -1467,45 +1467,45 @@ Sets the specified register to a value when the breakpoint at specified address 
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: please check required arguments."
-        print ""
-        print help
+        print("[-] error: please check required arguments.")
+        print("")
+        print(help)
         return
     if len(cmd) > 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
     if len(cmd) < 3:
-        print "[-] error: please check required arguments."
-        print ""
-        print help
+        print("[-] error: please check required arguments.")
+        print("")
+        print(help)
         return
 
     address = evaluate(cmd[0])
     if address == None:
-        print "[-] error: invalid address."
-        print ""
-        print help
+        print("[-] error: invalid address.")
+        print("")
+        print(help)
         return
 
     # check if register is set and valid
     if (cmd[1] in All_Registers) == False:
-        print "[-] error: invalid register."
-        print ""
-        print help
+        print("[-] error: invalid register.")
+        print("")
+        print(help)
         return
-    
+
     value = evaluate(cmd[2])
     if value == None:
-        print "[-] error: invalid value."
-        print ""
-        print help
+        print("[-] error: invalid value.")
+        print("")
+        print(help)
         return
 
     register = cmd[1]
-    
+
     for tmp_entry in crack_cmds_noret:
         if tmp_entry['address'] == address:
-            print "[-] error: address already contains a crack command."
+            print("[-] error: address already contains a crack command.")
             return
 
     # set a new entry so we can deal with it in the callback
@@ -1513,7 +1513,7 @@ Sets the specified register to a value when the breakpoint at specified address 
     new_crack_entry['address'] = address
     new_crack_entry['register'] = register
     new_crack_entry['value'] = value
-    
+
     crack_cmds_noret.append(new_crack_entry)
 
     target = get_target()
@@ -1527,7 +1527,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
     global crack_cmds_noret
     # retrieve address we just hit
     current_bp = bp_loc.GetLoadAddress()
-    print "[+] warning: hit crack command no ret breakpoint at 0x{:x}".format(current_bp)
+    print("[+] warning: hit crack command no ret breakpoint at 0x{:x}".format(current_bp))
     crack_entry = None
     for tmp_entry in crack_cmds_noret:
         if tmp_entry['address'] == current_bp:
@@ -1535,7 +1535,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
             break
 
     if crack_entry == None:
-        print "[-] error: current breakpoint not found in list."
+        print("[-] error: current breakpoint not found in list.")
         return
 
     # must be a string!
@@ -1567,28 +1567,28 @@ Note: expressions supported, do not use spaces between operators.
 
     global GlobalListOutput
     GlobalListOutput = []
-        
+
     cmd = command.split()
 
     if len(cmd) == 0:
         dump_addr = get_current_pc()
         if dump_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
-           return        
+           print(help)
+           return
         dump_addr = evaluate(cmd[0])
         if dump_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a start address."
-        print ""
-        print help
+        print("[-] error: please insert a start address.")
+        print("")
+        print(help)
         return
 
     err = lldb.SBError()
@@ -1602,7 +1602,7 @@ Note: expressions supported, do not use spaces between operators.
         if err.Success() == True:
             break
         size = size - 1
-    membuff = membuff + "\x00" * (0x100-size) 
+    membuff = membuff + "\x00" * (0x100-size)
     color(BLUE)
     if get_pointer_size() == 4:
         output("[0x0000:0x%.08X]" % dump_addr)
@@ -1613,7 +1613,7 @@ Note: expressions supported, do not use spaces between operators.
     color_bold()
     output("[data]")
     color_reset()
-    output("\n")        
+    output("\n")
     #output(hexdump(dump_addr, membuff, " ", 16));
     index = 0
     while index < 0x100:
@@ -1624,24 +1624,24 @@ Note: expressions supported, do not use spaces between operators.
             szaddr = "0x%.016lX" % dump_addr
         fmtnice = "%.02X %.02X %.02X %.02X %.02X %.02X %.02X %.02X"
         fmtnice = fmtnice + " - " + fmtnice
-        output("\033[1m%s :\033[0m %.02X %.02X %.02X %.02X %.02X %.02X %.02X %.02X - %.02X %.02X %.02X %.02X %.02X %.02X %.02X %.02X \033[1m%s\033[0m" % 
-            (szaddr, 
-            data[0], 
-            data[1], 
-            data[2], 
-            data[3], 
-            data[4], 
-            data[5], 
-            data[6], 
-            data[7], 
-            data[8], 
-            data[9], 
-            data[10], 
-            data[11], 
-            data[12], 
-            data[13], 
-            data[14], 
-            data[15], 
+        output("\033[1m%s :\033[0m %.02X %.02X %.02X %.02X %.02X %.02X %.02X %.02X - %.02X %.02X %.02X %.02X %.02X %.02X %.02X %.02X \033[1m%s\033[0m" %
+            (szaddr,
+            data[0],
+            data[1],
+            data[2],
+            data[3],
+            data[4],
+            data[5],
+            data[6],
+            data[7],
+            data[8],
+            data[9],
+            data[10],
+            data[11],
+            data[12],
+            data[13],
+            data[14],
+            data[15],
             quotechars(membuff[index:index+0x10])));
         if index + 0x10 != 0x100:
             output("\n")
@@ -1673,22 +1673,22 @@ Note: expressions supported, do not use spaces between operators.
     if len(cmd) == 0:
         dump_addr = get_current_pc()
         if dump_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
         dump_addr = evaluate(cmd[0])
         if dump_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a start address."
-        print ""
-        print help
+        print("[-] error: please insert a start address.")
+        print("")
+        print(help)
         return
 
     err = lldb.SBError()
@@ -1722,7 +1722,7 @@ Note: expressions supported, do not use spaces between operators.
             szaddr = "0x%.08X" % dump_addr
         else:
             szaddr = "0x%.016lX" % dump_addr
-        output("\033[1m%s :\033[0m %.04X %.04X %.04X %.04X %.04X %.04X %.04X %.04X \033[1m%s\033[0m" % (szaddr, 
+        output("\033[1m%s :\033[0m %.04X %.04X %.04X %.04X %.04X %.04X %.04X %.04X \033[1m%s\033[0m" % (szaddr,
             data[0],
             data[1],
             data[2],
@@ -1760,27 +1760,27 @@ Note: expressions supported, do not use spaces between operators.
     if len(cmd) == 0:
         dump_addr = get_current_pc()
         if dump_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
         dump_addr = evaluate(cmd[0])
         if dump_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a start address."
-        print ""
-        print help
+        print("[-] error: please insert a start address.")
+        print("")
+        print(help)
         return
 
     err = lldb.SBError()
     size = 0x100
-    while size != 0:    
+    while size != 0:
         membuff = get_process().ReadMemory(dump_addr, size, err)
         if err.Success() == False and size == 0:
             output(str(err))
@@ -1808,11 +1808,11 @@ Note: expressions supported, do not use spaces between operators.
             szaddr = "0x%.08X" % dump_addr
         else:  #is_x64():
             szaddr = "0x%.016lX" % dump_addr
-        output("\033[1m%s :\033[0m %.08X %.08X %.08X %.08X \033[1m%s\033[0m" % (szaddr, 
-                                            mem0, 
-                                            mem1, 
-                                            mem2, 
-                                            mem3, 
+        output("\033[1m%s :\033[0m %.08X %.08X %.08X %.08X \033[1m%s\033[0m" % (szaddr,
+                                            mem0,
+                                            mem1,
+                                            mem2,
+                                            mem3,
                                             quotechars(membuff[index:index+0x10])));
         if index + 0x10 != 0x100:
             output("\n")
@@ -1842,22 +1842,22 @@ Note: expressions supported, do not use spaces between operators.
     if len(cmd) == 0:
         dump_addr = get_current_pc()
         if dump_addr == 0:
-            print "[-] error: invalid current address."
+            print("[-] error: invalid current address.")
             return
     elif len(cmd) == 1:
         if cmd[0] == "help":
-           print help
-           return        
+           print(help)
+           return
         dump_addr = evaluate(cmd[0])
         if dump_addr == None:
-            print "[-] error: invalid input address value."
-            print ""
-            print help
+            print("[-] error: invalid input address value.")
+            print("")
+            print(help)
             return
     else:
-        print "[-] error: please insert a start address."
-        print ""
-        print help
+        print("[-] error: please insert a start address.")
+        print("")
+        print(help)
         return
 
     err = lldb.SBError()
@@ -1887,7 +1887,7 @@ Note: expressions supported, do not use spaces between operators.
     color_bold()
     output("[data]")
     color_reset()
-    output("\n")   
+    output("\n")
     index = 0
     while index < 0x100:
         (mem0, mem1, mem2, mem3) = struct.unpack("QQQQ", membuff[index:index+0x20])
@@ -1929,7 +1929,7 @@ def quotechars( chars ):
     for x in chars:
         if ord(x) >= 0x20 and ord(x) <= 126:
             data += x
-        else:       
+        else:
             data += "."
     return data
 
@@ -1961,7 +1961,7 @@ def findmem(debugger, command, result, dict):
     parser.add_argument("-c", "--count",   help="How many occurances to find, default is all")
 
     parser = parser.parse_args(arg.split())
-    
+
     if parser.string != None:
         search_string = parser.string
     elif parser.unicode != None:
@@ -1992,22 +1992,22 @@ def findmem(debugger, command, result, dict):
     else:
         print("[-] Wrong option... use findmem --help")
         return
-    
+
     count = -1
     if parser.count != None:
         count = evaluate(parser.count)
         if count == None:
             print("[-] Error evaluating count : " + parser.count)
             return
-    
+
     process = get_process()
     pid = process.GetProcessID()
     output_data = subprocess.check_output(["/usr/bin/vmmap", "%d" % pid])
     lines = output_data.split("\n")
     #print(lines);
-    #this relies on output from /usr/bin/vmmap so code is dependant on that 
+    #this relies on output from /usr/bin/vmmap so code is dependant on that
     #only reason why it's used is for better description of regions, which is
-    #nice to have. If they change vmmap in the future, I'll use my version 
+    #nice to have. If they change vmmap in the future, I'll use my version
     #and that output is much easier to parse...
     newlines = []
     for x in lines:
@@ -2024,7 +2024,7 @@ def findmem(debugger, command, result, dict):
         tmp.append(mem_start)
         tmp.append(mem_end)
         newlines.append(tmp)
-    
+
     lines = sorted(newlines, key=lambda sortnewlines: sortnewlines[1])
     #move line extraction a bit up, thus we can latter sort it, as vmmap gives
     #readable pages only, and then writable pages, so it looks ugly a bit :)
@@ -2034,9 +2034,9 @@ def findmem(debugger, command, result, dict):
         mem_start= x[1]
         mem_end  = x[2]
         mem_size = mem_end - mem_start
-    
+
         err = lldb.SBError()
-                
+
         membuff = process.ReadMemory(mem_start, mem_size, err)
         if err.Success() == False:
             #output(str(err));
@@ -2046,17 +2046,17 @@ def findmem(debugger, command, result, dict):
         base_displayed = 0
 
         while True:
-            if count == 0: 
+            if count == 0:
                 return
             idx = membuff.find(search_string)
-            if idx == -1: 
+            if idx == -1:
                 break
             if count != -1:
                 count = count - 1
             off += idx
-    
+
             GlobalListOutput = []
-            
+
             if get_pointer_size() == 4:
                 ptrformat = "%.08X"
             else:
@@ -2102,20 +2102,20 @@ Note: expressions supported, do not use spaces between operators.
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: please insert an address."
-        print ""
-        print help
+        print("[-] error: please insert an address.")
+        print("")
+        print(help)
         return
 
     if cmd[0] == "help":
-        print help
-        return        
+        print(help)
+        return
 
     dump_addr = evaluate(cmd[0])
     if dump_addr == None:
-        print "[-] error: invalid address value."
-        print ""
-        print help
+        print("[-] error: invalid address value.")
+        print("")
+        print(help)
         DATA_WINDOW_ADDRESS = 0
         return
     DATA_WINDOW_ADDRESS = dump_addr
@@ -2141,7 +2141,7 @@ def get_frame():
             break
     # this will generate a false positive when we start the target the first time because there's no context yet.
     if ret == None:
-        print "[-] warning: get_frame() failed. Is the target binary started?"
+        print("[-] warning: get_frame() failed. Is the target binary started?")
 
     return ret
 
@@ -2151,16 +2151,16 @@ def get_thread():
     for thread in get_process():
         if thread.GetStopReason() != lldb.eStopReasonNone and thread.GetStopReason() != lldb.eStopReasonInvalid:
             ret = thread
-    
+
     if ret == None:
-        print "[-] warning: get_thread() failed. Is the target binary started?"
+        print("[-] warning: get_thread() failed. Is the target binary started?")
 
     return ret
 
 def get_target():
     target = lldb.debugger.GetSelectedTarget()
     if not target:
-        print "[-] error: no target available. please add a target to lldb."
+        print("[-] error: no target available. please add a target to lldb.")
         return
     return target
 
@@ -2176,7 +2176,7 @@ def evaluate(command):
     # use the target version - if no target exists we can't do anything about it
     if frame == None:
         return evaluate_target(command)
-    
+
     value = frame.EvaluateExpression(command)
     if value.IsValid() == False:
         return None
@@ -2191,7 +2191,7 @@ def evaluate_target(command):
     target = get_target()
     if target == None:
         return None
-    
+
     value = target.EvaluateExpression(command)
     if value.IsValid() == False:
         return None
@@ -2233,7 +2233,7 @@ def get_instance_object():
     # not supported yet
     elif is_arm():
         instanceObject = None
-  
+
     return instanceObject
 #
 # End Functions to extract internal and process lldb information
@@ -2252,7 +2252,7 @@ def get_gp_register(reg_name):
         if reg_name == reg.GetName():
             return int(reg.GetValue(), 16)
     return 0
-        
+
 def get_register(reg_name):
     regs = get_registers("general purpose")
     if regs == None:
@@ -2282,7 +2282,7 @@ def get_current_pc():
     elif is_x64():
         pc_addr = get_gp_register("rip")
     else:
-        print "[-] error: wrong architecture."
+        print("[-] error: wrong architecture.")
         return 0
     return pc_addr
 
@@ -2294,7 +2294,7 @@ def get_current_sp():
     elif is_x64():
         sp_addr = get_gp_register("rsp")
     else:
-        print "[-] error: wrong architecture."
+        print("[-] error: wrong architecture.")
         return 0
     return sp_addr
 
@@ -2310,20 +2310,20 @@ Where value can be a single value or an expression.
 
     cmd = command.split()
     if len(cmd) == 0:
-        print "[-] error: command requires arguments."
-        print ""
-        print help
+        print("[-] error: command requires arguments.")
+        print("")
+        print(help)
         return
 
     if cmd[0] == "help":
-        print help
+        print(help)
         return
 
     value = evaluate(command)
     if value == None:
-        print "[-] error: invalid input value."
-        print ""
-        print help
+        print("[-] error: invalid input value.")
+        print("")
+        print(help)
         return
 
     # we need to format because hex() will return string with an L and that will fail to update register
@@ -2418,7 +2418,7 @@ def modify_eflags(register):
     elif is_i386():
         eflags = get_gp_register("eflags")
     else:
-        print "[-] error: unsupported architecture."
+        print("[-] error: unsupported architecture.")
         return
 
     if register == "a":
@@ -2480,17 +2480,17 @@ Flip current adjust flag.
 
 Syntax: cfa
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
-    
+
     modify_eflags("a")
 
 def cfc(debugger, command, result, dict):
@@ -2500,15 +2500,15 @@ Flip current carry flag.
 
 Syntax: cfc
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("c")
@@ -2520,17 +2520,17 @@ Flip current direction flag.
 
 Syntax: cfd
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
-    
+
     modify_eflags("d")
 
 def cfi(debugger, command, result, dict):
@@ -2540,15 +2540,15 @@ Flip current interrupt flag.
 
 Syntax: cfi
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("i")
@@ -2560,15 +2560,15 @@ Flip current overflow flag.
 
 Syntax: cfo
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("o")
@@ -2580,15 +2580,15 @@ Flip current parity flag.
 
 Syntax: cfp
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("p")
@@ -2600,15 +2600,15 @@ Flip current sign flag.
 
 Syntax: cfs
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("s")
@@ -2620,15 +2620,15 @@ Flip current trap flag.
 
 Syntax: cft
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("t")
@@ -2640,15 +2640,15 @@ Flip current zero flag.
 
 Syntax: cfz
 """
-    
+
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
-            print help
+            print(help)
             return
-        print "[-] error: command doesn't take any arguments."
-        print ""
-        print help
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
         return
 
     modify_eflags("z")
@@ -2662,7 +2662,7 @@ def dump_eflags(eflags):
         output("O ")
     else:
         output("o ")
-    
+
     if (eflags >> 0xA) & 1:
         output("D ")
     else:
@@ -2677,17 +2677,17 @@ def dump_eflags(eflags):
         output("T ")
     else:
         output("t ")
-    
+
     if (eflags >> 7) & 1:
         output("S ")
     else:
         output("s ")
-    
+
     if (eflags >> 6) & 1:
         output("Z ")
     else:
         output("z ")
-    
+
     if (eflags >> 4) & 1:
         output("A ")
     else:
@@ -2696,7 +2696,7 @@ def dump_eflags(eflags):
     if (eflags >> 2) & 1:
         output("P ")
     else:
-        output("p ")        
+        output("p ")
 
     if eflags & 1:
         output("C")
@@ -2717,7 +2717,7 @@ def dump_jumpx86(eflags):
 
     if (eflags >> 0xB) & 1:
         o_flag = 1
-    
+
     if (eflags >> 0xA) & 1:
         d_flag = 1
 
@@ -2726,13 +2726,13 @@ def dump_jumpx86(eflags):
 
     if (eflags >> 8) & 1:
         t_flag = 1
-    
+
     if (eflags >> 7) & 1:
         s_flag = 1
-    
+
     if (eflags >> 6) & 1:
         z_flag = 1
-    
+
     if (eflags >> 4) & 1:
         a_flag = 1
 
@@ -2749,7 +2749,7 @@ def dump_jumpx86(eflags):
     elif is_x64():
         pc_addr = get_gp_register("rip")
     else:
-        print "[-] error: wrong architecture."
+        print("[-] error: wrong architecture.")
         return
 
     mnemonic = get_mnemonic(pc_addr)
@@ -2903,8 +2903,8 @@ def reg64():
     global old_rbp
     global old_rsi
     global old_rdi
-    global old_r8 
-    global old_r9 
+    global old_r8
+    global old_r9
     global old_r10
     global old_r11
     global old_r12
@@ -2944,7 +2944,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rax))
     old_rax = rax
-    
+
     color(COLOR_REGNAME)
     output("  RBX: ")
     if rbx == old_rbx:
@@ -2953,7 +2953,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rbx))
     old_rbx = rbx
-    
+
     color(COLOR_REGNAME)
     output("  RBP: ")
     if rbp == old_rbp:
@@ -2962,7 +2962,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rbp))
     old_rbp = rbp
-    
+
     color(COLOR_REGNAME)
     output("  RSP: ")
     if rsp == old_rsp:
@@ -2971,16 +2971,16 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rsp))
     old_rsp = rsp
-    
+
     output("  ")
     color_bold()
     color_underline()
     color(COLOR_CPUFLAGS)
     dump_eflags(rflags)
     color_reset()
-    
+
     output("\n")
-            
+
     color(COLOR_REGNAME)
     output("  RDI: ")
     if rdi == old_rdi:
@@ -2989,7 +2989,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rdi))
     old_rdi = rdi
-    
+
     color(COLOR_REGNAME)
     output("  RSI: ")
     if rsi == old_rsi:
@@ -2998,7 +2998,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rsi))
     old_rsi = rsi
-    
+
     color(COLOR_REGNAME)
     output("  RDX: ")
     if rdx == old_rdx:
@@ -3007,7 +3007,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rdx))
     old_rdx = rdx
-    
+
     color(COLOR_REGNAME)
     output("  RCX: ")
     if rcx == old_rcx:
@@ -3016,7 +3016,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rcx))
     old_rcx = rcx
-    
+
     color(COLOR_REGNAME)
     output("  RIP: ")
     if rip == old_rip:
@@ -3026,7 +3026,7 @@ def reg64():
     output("0x%.016lX" % (rip))
     old_rip = rip
     output("\n")
-        
+
     color(COLOR_REGNAME)
     output("  R8:  ")
     if r8 == old_r8:
@@ -3035,7 +3035,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r8))
     old_r8 = r8
-    
+
     color(COLOR_REGNAME)
     output("  R9:  ")
     if r9 == old_r9:
@@ -3044,7 +3044,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r9))
     old_r9 = r9
-    
+
     color(COLOR_REGNAME)
     output("  R10: ")
     if r10 == old_r10:
@@ -3053,7 +3053,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r10))
     old_r10 = r10
-    
+
     color(COLOR_REGNAME)
     output("  R11: ")
     if r11 == old_r11:
@@ -3062,7 +3062,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r11))
     old_r11 = r11
-    
+
     color(COLOR_REGNAME)
     output("  R12: ")
     if r12 == old_r12:
@@ -3071,9 +3071,9 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r12))
     old_r12 = r12
-    
+
     output("\n")
-        
+
     color(COLOR_REGNAME)
     output("  R13: ")
     if r13 == old_r13:
@@ -3082,7 +3082,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r13))
     old_r13 = r13
-    
+
     color(COLOR_REGNAME)
     output("  R14: ")
     if r14 == old_r14:
@@ -3091,7 +3091,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r14))
     old_r14 = r14
-    
+
     color(COLOR_REGNAME)
     output("  R15: ")
     if r15 == old_r15:
@@ -3101,7 +3101,7 @@ def reg64():
     output("0x%.016lX" % (r15))
     old_r15 = r15
     output("\n")
-        
+
     color(COLOR_REGNAME)
     output("  CS:  ")
     if cs == old_cs:
@@ -3110,7 +3110,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (cs))
     old_cs = cs
-        
+
     color(COLOR_REGNAME)
     output("  FS: ")
     if fs == old_fs:
@@ -3119,7 +3119,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (fs))
     old_fs = fs
-    
+
     color(COLOR_REGNAME)
     output("  GS: ")
     if gs == old_gs:
@@ -3128,7 +3128,7 @@ def reg64():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (gs))
     old_gs = gs
-    
+
     dump_jumpx86(rflags)
     output("\n")
 
@@ -3149,7 +3149,7 @@ def reg32():
     global old_ss
     global old_es
     global old_eip
-        
+
     color(COLOR_REGNAME)
     output("  EAX: ")
     eax = get_gp_register("eax")
@@ -3159,7 +3159,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (eax))
     old_eax = eax
-    
+
     color(COLOR_REGNAME)
     output("  EBX: ")
     ebx = get_gp_register("ebx")
@@ -3169,7 +3169,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (ebx))
     old_ebx = ebx
-    
+
     color(COLOR_REGNAME)
     output("  ECX: ")
     ecx = get_gp_register("ecx")
@@ -3189,7 +3189,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (edx))
     old_edx = edx
-    
+
     output("  ")
     eflags = get_gp_register("eflags")
     color_bold()
@@ -3197,9 +3197,9 @@ def reg32():
     color(COLOR_CPUFLAGS)
     dump_eflags(eflags)
     color_reset()
-    
+
     output("\n")
-    
+
     color(COLOR_REGNAME)
     output("  ESI: ")
     esi = get_gp_register("esi")
@@ -3209,7 +3209,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (esi))
     old_esi = esi
-    
+
     color(COLOR_REGNAME)
     output("  EDI: ")
     edi = get_gp_register("edi")
@@ -3219,7 +3219,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (edi))
     old_edi = edi
-    
+
     color(COLOR_REGNAME)
     output("  EBP: ")
     ebp = get_gp_register("ebp")
@@ -3229,7 +3229,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (ebp))
     old_ebp = ebp
-    
+
     color(COLOR_REGNAME)
     output("  ESP: ")
     esp = get_gp_register("esp")
@@ -3239,7 +3239,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (esp))
     old_esp = esp
-    
+
     color(COLOR_REGNAME)
     output("  EIP: ")
     eip = get_gp_register("eip")
@@ -3250,7 +3250,7 @@ def reg32():
     output("0x%.08X" % (eip))
     old_eip = eip
     output("\n")
-    
+
     color(COLOR_REGNAME)
     output("  CS:  ")
     cs = get_gp_register("cs")
@@ -3260,7 +3260,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (cs))
     old_cs = cs
-    
+
     color(COLOR_REGNAME)
     output("  DS: ")
     ds = get_gp_register("ds")
@@ -3270,7 +3270,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (ds))
     old_ds = ds
-    
+
     color(COLOR_REGNAME)
     output("  ES: ")
     es = get_gp_register("es")
@@ -3280,7 +3280,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (es))
     old_es = es
-    
+
     color(COLOR_REGNAME)
     output("  FS: ")
     fs = get_gp_register("fs")
@@ -3290,7 +3290,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (fs))
     old_fs = fs
-    
+
     color(COLOR_REGNAME)
     output("  GS: ")
     gs = get_gp_register("gs")
@@ -3300,7 +3300,7 @@ def reg32():
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (gs))
     old_gs = gs
-    
+
     color(COLOR_REGNAME)
     output("  SS: ")
     ss = get_gp_register("ss")
@@ -3313,7 +3313,7 @@ def reg32():
 
     dump_jumpx86(eflags)
     output("\n")
-    
+
 def dump_cpsr(cpsr):
     if (cpsr >> 31) & 1:
         output("N ")
@@ -3329,22 +3329,22 @@ def dump_cpsr(cpsr):
         output("C ")
     else:
         output("c ")
-    
+
     if (cpsr >> 28) & 1:
         output("V ")
     else:
         output("v ")
-    
+
     if (cpsr >> 27) & 1:
         output("Q ")
     else:
         output("q ")
-    
+
     if (cpsr >> 24) & 1:
         output("J ")
     else:
         output("j ")
-    
+
     if (cpsr >> 9) & 1:
         output("E ")
     else:
@@ -3365,7 +3365,7 @@ def dump_cpsr(cpsr):
         output("T")
     else:
         output("t")
-        
+
 def regarm():
     global  old_arm_r0
     global  old_arm_r1
@@ -3424,7 +3424,7 @@ def regarm():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r3))
     old_arm_r3 = r3
-    
+
     output(" ")
     color_bold()
     color_underline()
@@ -3434,7 +3434,7 @@ def regarm():
     color_reset()
 
     output("\n")
-    
+
     color(COLOR_REGNAME)
     output("  R4:  ")
     r4 = get_gp_register("r4")
@@ -3516,7 +3516,7 @@ def regarm():
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r11))
     old_arm_r11 = r11
-    
+
     output("\n")
 
     color(COLOR_REGNAME)
@@ -3562,7 +3562,7 @@ def regarm():
 
 def print_registers():
     arch = get_arch()
-    if is_i386(): 
+    if is_i386():
         reg32()
     elif is_x64():
         reg64()
@@ -3609,7 +3609,7 @@ def DumpInstructions(debugger, command, result, dict):
     global GlobalListOutput
     global arm_type
     GlobalListOutput = []
-    
+
     if is_arm():
         cpsr = get_gp_register("cpsr")
         t = (cpsr >> 5) & 1
@@ -3634,12 +3634,12 @@ def DumpInstructions(debugger, command, result, dict):
         if is_arm():
             lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -A "+arm_type+" --start-address=" + cmd[0] + " --count="+cmd[1], res)
             lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=" + cmd[0] + " --count="+cmd[1], res)
-        
+
     if res.Succeeded() == True:
         output(res.GetOutput())
     else:
         output("[-] Error getting instructions for : " + command)
-    
+
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -3650,7 +3650,7 @@ def get_mnemonic(target_addr):
 
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, 'intel')
     if instruction_list.GetSize() == 0:
-        print "[-] error: not enough instructions disassembled."
+        print("[-] error: not enough instructions disassembled.")
         return ""
 
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
@@ -3666,9 +3666,9 @@ def get_operands(target_addr):
 
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, 'intel')
     if instruction_list.GetSize() == 0:
-        print "[-] error: not enough instructions disassembled."
+        print("[-] error: not enough instructions disassembled.")
         return ""
-    
+
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
     operands = cur_instruction.operands
 
@@ -3681,7 +3681,7 @@ def get_inst_size(target_addr):
 
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, 'intel')
     if instruction_list.GetSize() == 0:
-        print "[-] error: not enough instructions disassembled."
+        print("[-] error: not enough instructions disassembled.")
         return 0
 
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
@@ -3695,7 +3695,7 @@ def get_inst_size(target_addr):
 # Commands that use external utilities
 #
 
-def show_loadcmds(debugger, command, result, dict): 
+def show_loadcmds(debugger, command, result, dict):
     '''Show otool output of Mach-O load commands. Use \'show_loadcmds\' for more information.'''
     help = """
 Show otool output of Mach-O load commands.
@@ -3705,33 +3705,33 @@ Syntax: show_loadcmds <address>
 Where address is start of Mach-O header in memory.
 Note: expressions supported, do not use spaces between operators.
 """
-    
+
     error = lldb.SBError()
 
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
         header_addr = evaluate(cmd[0])
         if header_addr == None:
-            print "[-] error: invalid header address value."
-            print ""
-            print help
-            return        
+            print("[-] error: invalid header address value.")
+            print("")
+            print(help)
+            return
     else:
-        print "[-] error: please insert a valid Mach-O header address."
-        print ""
-        print help
+        print("[-] error: please insert a valid Mach-O header address.")
+        print("")
+        print(help)
         return
 
     if os.path.isfile("/usr/bin/otool") == False:
-            print "/usr/bin/otool not found. Please install Xcode or Xcode command line tools."
+            print("/usr/bin/otool not found. Please install Xcode or Xcode command line tools.")
             return
-    
+
     bytes_string = get_process().ReadMemory(header_addr, 4096*10, error)
     if error.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % header_addr
+        print("[-] error: Failed to read memory at 0x%x." % header_addr)
         return
 
     # open a temporary filename and set it to delete on close
@@ -3740,13 +3740,13 @@ Note: expressions supported, do not use spaces between operators.
     # pass output to otool
     output_data = subprocess.check_output(["/usr/bin/otool", "-l", f.name])
     # show the data
-    print output_data
+    print(output_data)
     # close file - it will be automatically deleted
     f.close()
 
     return
 
-def show_header(debugger, command, result, dict): 
+def show_header(debugger, command, result, dict):
     '''Show otool output of Mach-O header. Use \'show_header\' for more information.'''
     help = """
 Show otool output of Mach-O header.
@@ -3762,29 +3762,29 @@ Note: expressions supported, do not use spaces between operators.
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
-           print help
+           print(help)
            return
         header_addr = evaluate(cmd[0])
         if header_addr == None:
-            print "[-] error: invalid header address value."
-            print ""
-            print help
-            return        
+            print("[-] error: invalid header address value.")
+            print("")
+            print(help)
+            return
     else:
-        print "[-] error: please insert a valid Mach-O header address."
-        print ""
-        print help
+        print("[-] error: please insert a valid Mach-O header address.")
+        print("")
+        print(help)
         return
 
     if os.path.isfile("/usr/bin/otool") == False:
-            print "/usr/bin/otool not found. Please install Xcode or Xcode command line tools."
+            print("/usr/bin/otool not found. Please install Xcode or Xcode command line tools.")
             return
-    
+
     # recent otool versions will fail so we need to read a reasonable amount of memory
     # even just for the mach-o header
     bytes_string = get_process().ReadMemory(header_addr, 4096*10, error)
     if error.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % header_addr
+        print("[-] error: Failed to read memory at 0x%x." % header_addr)
         return
 
     # open a temporary filename and set it to delete on close
@@ -3793,7 +3793,7 @@ Note: expressions supported, do not use spaces between operators.
     # pass output to otool
     output_data = subprocess.check_output(["/usr/bin/otool", "-hv", f.name])
     # show the data
-    print output_data
+    print(output_data)
     # close file - it will be automatically deleted
     f.close()
 
@@ -3805,19 +3805,19 @@ def assemble_keystone(arch, mode, code, syntax=0):
     if syntax != 0:
         ks.syntax = syntax
 
-    print "\nKeystone output:\n----------"
+    print("\nKeystone output:\n----------")
     for inst in code:
         try:
             encoding, count = ks.asm(inst)
         except KsError as e:
-            print "[-] error: keystone failed to assemble: {:s}".format(e)
+            print("[-] error: keystone failed to assemble: {:s}".format(e))
             return
         output = []
         output.append(inst)
         output.append('->')
         for i in encoding:
             output.append("{:02x}".format(i))
-        print " ".join(output)
+        print(" ".join(output))
 
 def asm32(debugger, command, result, dict):
     '''32 bit x86 interactive Keystone based assembler. Use \'asm32 help\' for more information.'''
@@ -3833,20 +3833,20 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 """
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     if CONFIG_KEYSTONE_AVAILABLE == 0:
-        print "[-] error: keystone python bindings not available. please install from www.keystone-engine.org."
+        print("[-] error: keystone python bindings not available. please install from www.keystone-engine.org.")
         return
-    
+
     inst_list = []
     while True:
         line = raw_input('Assemble ("stop" or "end" to finish): ')
         if line == 'stop' or line == 'end':
             break
         inst_list.append(line)
-    
+
     assemble_keystone(KS_ARCH_X86, KS_MODE_32, inst_list)
 
 def asm64(debugger, command, result, dict):
@@ -3863,20 +3863,20 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 """
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     if CONFIG_KEYSTONE_AVAILABLE == 0:
-        print "[-] error: keystone python bindings not available. please install from www.keystone-engine.org."
+        print("[-] error: keystone python bindings not available. please install from www.keystone-engine.org.")
         return
-    
+
     inst_list = []
     while True:
         line = raw_input('Assemble ("stop" or "end" to finish): ')
         if line == 'stop' or line == 'end':
             break
         inst_list.append(line)
-    
+
     assemble_keystone(KS_ARCH_X86, KS_MODE_64, inst_list)
 
 def arm32(debugger, command, result, dict):
@@ -3888,25 +3888,25 @@ Syntax: arm32
 
 Type one instruction per line. Finish with \'end\' or \'stop\'.
 Keystone set to KS_ARCH_ARM and KS_MODE_ARM.
-    
+
 Requires Keystone and Python bindings from www.keystone-engine.org.
 """
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     if CONFIG_KEYSTONE_AVAILABLE == 0:
-        print "[-] error: keystone python bindings not available. please install from www.keystone-engine.org."
+        print("[-] error: keystone python bindings not available. please install from www.keystone-engine.org.")
         return
-    
+
     inst_list = []
     while True:
         line = raw_input('Assemble ("stop" or "end" to finish): ')
         if line == 'stop' or line == 'end':
             break
         inst_list.append(line)
-    
+
     assemble_keystone(KS_ARCH_ARM, KS_MODE_ARM, inst_list)
 
 def armthumb(debugger, command, result, dict):
@@ -3923,20 +3923,20 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 """
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     if CONFIG_KEYSTONE_AVAILABLE == 0:
-        print "[-] error: keystone python bindings not available. please install from www.keystone-engine.org."
+        print("[-] error: keystone python bindings not available. please install from www.keystone-engine.org.")
         return
-    
+
     inst_list = []
     while True:
         line = raw_input('Assemble ("stop" or "end" to finish): ')
         if line == 'stop' or line == 'end':
             break
         inst_list.append(line)
-    
+
     assemble_keystone(KS_ARCH_ARM, KS_MODE_THUMB, inst_list)
 
 def arm64(debugger, command, result, dict):
@@ -3953,20 +3953,20 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 """
     cmd = command.split()
     if len(cmd) != 0 and cmd[0] == "help":
-        print help
+        print(help)
         return
 
     if CONFIG_KEYSTONE_AVAILABLE == 0:
-        print "[-] error: keystone python bindings not available. please install from www.keystone-engine.org."
+        print("[-] error: keystone python bindings not available. please install from www.keystone-engine.org.")
         return
-    
+
     inst_list = []
     while True:
         line = raw_input('Assemble ("stop" or "end" to finish): ')
         if line == 'stop' or line == 'end':
             break
         inst_list.append(line)
-    
+
     assemble_keystone(KS_ARCH_ARM64, KS_MODE_ARM, inst_list)
 
 #
@@ -3974,12 +3974,12 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 #
 
 # XXX: help
-def IphoneConnect(debugger, command, result, dict): 
+def IphoneConnect(debugger, command, result, dict):
     '''Connect to debugserver running on iPhone'''
     help = """ """
     global GlobalListOutput
     GlobalListOutput = []
-        
+
     if len(command) == 0 or ":" not in command:
         output("Connect to remote iPhone debug server")
         output("\n")
@@ -4016,10 +4016,10 @@ def display_stack():
     target = get_target()
     membuff = get_process().ReadMemory(stack_addr, 0x100, err)
     if err.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % stack_addr
+        print("[-] error: Failed to read memory at 0x%x." % stack_addr)
         return
     if len(membuff) == 0:
-        print "[-] error: not enough bytes read."
+        print("[-] error: not enough bytes read.")
         return
 
     output(hexdump(stack_addr, membuff, " ", 16, 4))
@@ -4027,17 +4027,17 @@ def display_stack():
 def display_data():
     '''Hex dump current data window pointer'''
     data_addr = DATA_WINDOW_ADDRESS
-    print data_addr
+    print(data_addr)
     if data_addr == 0:
         return
     err = lldb.SBError()
     target = get_target()
     membuff = get_process().ReadMemory(data_addr, 0x100, err)
     if err.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % stack_addr
+        print("[-] error: Failed to read memory at 0x%x." % stack_addr)
         return
     if len(membuff) == 0:
-        print "[-] error: not enough bytes read."
+        print("[-] error: not enough bytes read.")
         return
 
     output(hexdump(data_addr, membuff, " ", 16, 4))
@@ -4048,11 +4048,11 @@ def get_rip_relative_addr(source_address):
     target = get_target()
     inst_size = get_inst_size(source_address)
     if inst_size <= 1:
-        print "[-] error: instruction size too small."
+        print("[-] error: instruction size too small.")
         return 0
     offset_bytes = get_process().ReadMemory(source_address+1, inst_size-1, err)
     if err.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % source_address
+        print("[-] error: Failed to read memory at 0x%x." % source_address)
         return 0
     if inst_size == 2:
         data = struct.unpack("b", offset_bytes)
@@ -4079,7 +4079,7 @@ def get_indirect_flow_target(source_address):
             if x == None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
-            if value.IsValid() == False:                
+            if value.IsValid() == False:
                 return 0
             deref_addr = int(value.GetValue(), 10)
             if "rip" in operand:
@@ -4089,10 +4089,10 @@ def get_indirect_flow_target(source_address):
             if x == None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
-            if value.IsValid() == False:                
+            if value.IsValid() == False:
                 return 0
             deref_addr = int(value.GetValue(), 10)
-        
+
         # now we can dereference and find the call target
         if get_pointer_size() == 4:
             call_target_addr = get_process().ReadUnsignedFromMemory(deref_addr, 4, err)
@@ -4102,7 +4102,7 @@ def get_indirect_flow_target(source_address):
             return call_target_addr
         if err.Success() == False:
             return 0
-        return 0        
+        return 0
     # calls into a register
     elif operand.startswith('r') or operand.startswith('e'):
         #output("register call\n")
@@ -4111,7 +4111,7 @@ def get_indirect_flow_target(source_address):
             return 0
         #output("Result {}\n".format(x.group(1)))
         value = get_frame().EvaluateExpression("$" + x.group(1))
-        if value.IsValid() == False:                
+        if value.IsValid() == False:
             return 0
         return int(value.GetValue(), 10)
     # RIP relative calls
@@ -4138,7 +4138,7 @@ def get_ret_address(source_address):
         return 0
     ret_addr = get_process().ReadPointerFromMemory(stack_addr, err)
     if err.Success() == False:
-        print "[-] error: Failed to read memory at 0x%x." % stack_addr
+        print("[-] error: Failed to read memory at 0x%x." % stack_addr)
         return 0
     return ret_addr
 
@@ -4152,7 +4152,7 @@ def is_sending_objc_msg():
     # XXX: add others?
     if symbol.name != "objc_msgSend":
         return False
-    
+
     return True
 
 # XXX: x64 only
@@ -4172,7 +4172,7 @@ def display_objc():
     classname_value = get_frame().EvaluateExpression(classname_command)
     if classname_value.IsValid() == False:
         return
-    
+
     className = classname_value.GetSummary().strip('"')
 
     selector_addr = get_gp_register("rsi")
@@ -4199,7 +4199,7 @@ def display_indirect_flow():
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
         output("\n")
         return
-    
+
     if "call" == mnemonic or "callq" == mnemonic or ("jmp" in mnemonic) == True:
         # we need to identify the indirect target address
         indirect_addr = get_indirect_flow_target(pc_addr)
@@ -4212,14 +4212,14 @@ def display_indirect_flow():
 
     return
 #
-# The heart of lldbinit - when lldb stop this is where we land 
+# The heart of lldbinit - when lldb stop this is where we land
 #
 def HandleHookStopOnTarget(debugger, command, result, dict):
     '''Display current code context.'''
     # Don't display anything if we're inside Xcode
     if os.getenv('PATH').startswith('/Applications/Xcode.app'):
         return
-    
+
     global GlobalListOutput
     global arm_type
     global CONFIG_DISPLAY_STACK_WINDOW
@@ -4235,33 +4235,33 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             return
 
     frame = get_frame()
-    if not frame: 
+    if not frame:
         return
-            
+
     thread= frame.GetThread()
     while True:
         frame = get_frame()
         thread = frame.GetThread()
-        
+
         if thread.GetStopReason() == lldb.eStopReasonNone or thread.GetStopReason() == lldb.eStopReasonInvalid:
             time.sleep(0.001)
         else:
             break
-    
+
     GlobalListOutput = []
-    
+
     arch = get_arch()
     if not is_i386() and not is_x64() and not is_arm():
         #this is for ARM probably in the future... when I will need it...
         print("[-] error: Unknown architecture : " + arch)
         return
-    
+
     color(COLOR_SEPARATOR)
     if is_i386() or is_arm():
         output("---------------------------------------------------------------------------------")
     elif is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------")
-            
+
     color_bold()
     output("[regs]\n")
     color_reset()
@@ -4276,7 +4276,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         color_bold()
         output("[stack]\n")
         color_reset()
-    
+
         display_stack()
         output("\n")
     if CONFIG_DISPLAY_DATA_WINDOW == 1:
@@ -4288,7 +4288,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         color_bold()
         output("[data]\n")
         color_reset()
-    
+
         display_data()
         output("\n")
 
@@ -4313,14 +4313,14 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     color_bold()
     output("[code]\n")
     color_reset()
-    
+
     if is_i386():
         pc = get_register("eip")
     elif is_x64():
         pc = get_register("rip")
     elif is_arm():
-        pc = get_register("pc")        
-    
+        pc = get_register("pc")
+
     res = lldb.SBCommandReturnObject()
     if is_arm():
         cpsr = get_gp_register("cpsr")
@@ -4336,21 +4336,21 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -b --start-address=" + pc + " --count=" + str(CONFIG_DISASSEMBLY_LINE_COUNT), res)
         else:
             lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=" + pc + " --count=" + str(CONFIG_DISASSEMBLY_LINE_COUNT), res)
-    
+
     data = res.GetOutput()
     #split lines... and mark currently executed code...
     data = data.split("\n")
     #detemine what to hl, as sometimes lldb won't put => into stoped thread... well...
     #need to check if first sym is => or '  ' which means this is name without symol
     #symbols are stored 1st so here we go...
-    
+
     line_to_hl = 0
     #if data[0][0:2] == "->":
     #   line_to_hl = 0;
     #if data[0][0:2] != '  ':
     #   line_to_hl = 1;
-    
-    #now we look when pc is held in disassembly and we color only that line 
+
+    #now we look when pc is held in disassembly and we color only that line
     pc_text = int(str(pc).strip().split()[0], 16)
     pc_text = hex(pc_text)
     #print(pc_text);
@@ -4371,7 +4371,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         else:
             output(x)
             output("\n")
-        
+
     #output(res.GetOutput());
     color(COLOR_SEPARATOR)
     if get_pointer_size() == 4: #is_i386() or is_arm():
@@ -4380,9 +4380,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         output("-----------------------------------------------------------------------------------------------------------------------------")
     color_reset()
     #output("\n");
-    
+
     data = "".join(GlobalListOutput)
-    
+
     result.PutCString(data)
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
     return 0
