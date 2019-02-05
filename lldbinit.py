@@ -86,10 +86,6 @@ import  argparse
 import  subprocess
 import  tempfile
 
-# don't load if we are in Xcode since it is not compatible and will block Xcode
-if os.getenv('PATH').startswith('/Applications/Xcode'):
-    return
-
 try:
     from keystone import *
     CONFIG_KEYSTONE_AVAILABLE = 1
@@ -205,6 +201,10 @@ def __lldb_init_module(debugger, internal_dict):
     lldb console. With GetCommandinterpreter().HandleCommand() we can consume all output
     with SBCommandReturnObject and parse data before we send it to output (eg. modify it);
     '''
+
+    # don't load if we are in Xcode since it is not compatible and will block Xcode
+    if os.getenv('PATH').startswith('/Applications/Xcode'):
+        return
 
     '''
     If I'm running from $HOME where .lldbinit is located, seems like lldb will load 
