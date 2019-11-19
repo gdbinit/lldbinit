@@ -103,6 +103,16 @@ CONFIG_DISPLAY_STACK_WINDOW = 0
 CONFIG_DISPLAY_FLOW_WINDOW = 1
 CONFIG_ENABLE_REGISTER_SHORTCUTS = 1
 CONFIG_DISPLAY_DATA_WINDOW = 0
+# setup the logging level, which is a bitmask of any of the following possible values (don't use spaces, doesn't seem to work)
+#
+# LOG_VERBOSE LOG_PROCESS LOG_THREAD LOG_EXCEPTIONS LOG_SHLIB LOG_MEMORY LOG_MEMORY_DATA_SHORT LOG_MEMORY_DATA_LONG LOG_MEMORY_PROTECTIONS LOG_BREAKPOINTS LOG_EVENTS LOG_WATCHPOINTS
+# LOG_STEP LOG_TASK LOG_ALL LOG_DEFAULT LOG_NONE LOG_RNB_MINIMAL LOG_RNB_MEDIUM LOG_RNB_MAX LOG_RNB_COMM  LOG_RNB_REMOTE LOG_RNB_EVENTS LOG_RNB_PROC LOG_RNB_PACKETS LOG_RNB_ALL LOG_RNB_DEFAULT
+# LOG_DARWIN_LOG LOG_RNB_NONE
+#
+# to see log (at least in macOS)
+# $ log stream --process debugserver --style compact
+# (or whatever style you like)
+CONFIG_LOG_LEVEL = "LOG_NONE"
 
 # removes the offsets and modifies the module name position
 # reference: https://lldb.llvm.org/formats.html
@@ -222,7 +232,8 @@ def __lldb_init_module(debugger, internal_dict):
     lldb.debugger.GetCommandInterpreter().HandleCommand("settings set prompt \"(lldbinit) \"", res)
     #lldb.debugger.GetCommandInterpreter().HandleCommand("settings set prompt \"\033[01;31m(lldb) \033[0m\"", res);
     lldb.debugger.GetCommandInterpreter().HandleCommand("settings set stop-disassembly-count 0", res)
-
+    # set the log level - must be done on startup?
+    lldb.debugger.GetCommandInterpreter().HandleCommand("settings set target.process.extra-startup-command QSetLogging:bitmask=" + CONFIG_LOG_LEVEL + ";", res)
     if CONFIG_USE_CUSTOM_DISASSEMBLY_FORMAT == 1:
         lldb.debugger.GetCommandInterpreter().HandleCommand("settings set disassembly-format " + CUSTOM_DISASSEMBLY_FORMAT, res)
 
