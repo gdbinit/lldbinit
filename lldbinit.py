@@ -1799,7 +1799,7 @@ Note: expressions supported, do not use spaces between operators.
         if err.Success() == True:
             break
         size = size - 4
-    membuff = membuff + "\x00" * (0x100-size)
+    membuff = membuff + bytes(0x100-size)
     color(BLUE)
     if get_pointer_size() == 4: #is_i386() or is_arm():
         output("[0x0000:0x%.08X]" % dump_addr)
@@ -1934,11 +1934,10 @@ def hexdump(addr, chars, sep, width, lines=5):
     return "\n".join(l)
 
 def quotechars( chars ):
-        #return ''.join( ['.', c][c.isalnum()] for c in chars )
     data = ""
-    for x in chars:
-        if ord(x) >= 0x20 and ord(x) <= 126:
-            data += x
+    for x in bytearray(chars):
+        if x >= 0x20 and x <= 126:
+            data += chr(x)
         else:       
             data += "."
     return data
@@ -2191,9 +2190,10 @@ def evaluate(command):
     if value.IsValid() == False:
         return None
     try:
-        value = long(value.GetValue(), 10)
+        value = int(value.GetValue(), base=10)
         return value
-    except:
+    except Exception as e:
+        print("Exception on evaluate: " + str(e))
         return None
 
 # evaluate expression under target context instead of frame, for cases where frame is not available (target not started for example)
