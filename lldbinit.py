@@ -373,6 +373,7 @@ def lldbinitcmds(debugger, command, result, dict):
     [ "contextcodesize", "set number of instruction lines in code window" ],
     [ "b", "breakpoint address" ],
     [ "bpt", "set a temporary software breakpoint" ],
+    [ "bhb", "set an hardware breakpoint" ],
     [ "bpc", "clear breakpoint" ],
     [ "bpca", "clear all breakpoints" ],
     [ "bpd", "disable breakpoint" ],
@@ -677,14 +678,44 @@ Note: expressions supported, do not use spaces between operators.
     
 # hardware breakpoint
 def bhb(debugger, command, result, dict):
-    '''Set a hardware breakpoint'''
-    print("[-] error: lldb has no x86/x64 hardware breakpoints implementation.")
+    '''Set an hardware breakpoint'''
+    help = """
+Set an hardware breakpoint.
+
+Syntax: bhb <address>
+
+Note: expressions supported, do not use spaces between operators.
+"""
+
+    cmd = command.split()
+    if len(cmd) != 1:
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
+        return
+    if cmd[0] == "help":
+        print(help)
+        return
+    
+    value = evaluate(cmd[0])
+    if value == None:
+        print("[-] error: invalid input value.")
+        print("")
+        print(help)
+        return
+
+    # the python API doesn't seem to support hardware breakpoints
+    # so we set it via command line interpreter
+    res = lldb.SBCommandReturnObject()
+    lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H -a " + hex(value), res)
+
+    print("[+] Set hardware breakpoint at 0x{:x}".format(value))
     return
 
 # temporary hardware breakpoint
 def bht(debugger, command, result, dict):
     '''Set a temporary hardware breakpoint'''
-    print("[-] error: lldb has no x86/x64 hardware breakpoints implementation.")
+    print("[-] error: lldb has no x86/x64 temporary hardware breakpoints implementation.")
     return
 
 # clear breakpoint number
@@ -3680,7 +3711,7 @@ def get_operands(target_addr):
         return ""
     
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
-    operands = cur_instruction.operands
+    operands = cur_instruction.GetOperands(target)
 
     return operands
 
