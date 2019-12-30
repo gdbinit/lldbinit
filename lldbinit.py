@@ -4,14 +4,14 @@
 |    |   |    |     |    |  \|    |  _/  |/   |   \|  | |    |   
 |    |___|    |___  |    `   \    |   \  /    |    \  | |    |   
 |_______ \_______ \/_______  /______  /__\____|__  /__| |____|   
-        \/       \/        \/       \/           \/              LLDBINIT v1.0
+        \/       \/        \/       \/           \/              LLDBINIT v2.0
 
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 (c) Deroko 2014, 2015, 2016
 (c) fG! 2017-2019 - reverser@put.as - https://reverse.put.as
 
-https://github.com/gdbinit/lldbinit
+Available at https://github.com/gdbinit/lldbinit
 
 No original license by Deroko so I guess this is do whatever you want with this
 as long you keep original credits and sources references.
@@ -25,17 +25,17 @@ To list all implemented commands use 'lldbinitcmds' command.
 
 How to install it:
 ------------------
-cp lldbinit.py /Library/Python/2.7/site-packages
-in $HOME/.lldbinit add:
-command script import lldbinit
+
+$ cp lldbinit.py /Library/Python/2.7/site-packages
+$ echo "command script import lldbinit" >> $HOME/.lldbinit
 
 or
-cp lldbinit.py ~
-echo "command script import  ~/lldbinit.py" >>~/.lldbinit
+$ cp lldbinit.py ~
+$ echo "command script import  ~/lldbinit.py" >>$HOME/.lldbinit
 
 or
 
-just copy it somewhere and use **command script import path_to_script** when you want to load it.
+just copy it somewhere and use "command script import path_to_script" when you want to load it.
 
 TODO:
 -----
@@ -48,20 +48,13 @@ TODO:
 - add threads window?
 - remove that ugly stop information (deroko's trick doesn't seem to work anymore, lldb forces that over our captured input?)
 
+- command to search for symbol and display image address (image lookup -s symbol -v) (address is the range)
+- command to update breakpoints with new ASLR
+- fix get_indirect_flow_target (we can get real load address of the modules - check the new disassembler code)
+- solve addresses like lea    rsi, [rip + 0x38cf] (lldb does solve some stuff that it has symbols for and adds the info as comment)
+
 BUGS:
 -----
-- Disassembler output with API GetInstructions is all wrong for code not in main executable
-The reason is that the section information is bad
-    context = frame.GetSymbolContext(lldb.eSymbolContextEverything)
-    print(context)
-     Module: file = "/usr/lib/system/libsystem_blocks.dylib", arch = "x86_64"
-     Symbol: id = {0x0000000e}, range = [0x00000000000008ec-0x000000000000096c), mangled="_Block_release"
-    So even if we pass the correct base_addr the disassembly will be all wrong
-    ->  0x7fff9566c0d0: e8 73 f2 ff ff           call   0x7fff9566b348            ; tiny_free_no_lock
-    Disassembly operand we get 0x19348
-x libsystem_malloc.dylib[0x1a0d0]: call   0x19348
-     Module: file = "/usr/lib/system/libsystem_malloc.dylib", arch = "x86_64"
-     Symbol: id = {0x000000c7}, range = [0x0000000000019e36-0x000000000001a129), name="free_tiny"
 
 LLDB design:
 ------------
@@ -70,7 +63,7 @@ lldb -> debugger -> target -> process -> thread -> frame(s)
 '''
 
 if __name__ == "__main__":
-    print("Run only as script from lldb... Not as standalone program")
+    print("Run only as script from LLDB... Not as standalone program!")
 
 try:
     import  lldb
@@ -100,9 +93,10 @@ CONFIG_DISPLAY_DISASSEMBLY_BYTES = 1
 CONFIG_DISASSEMBLY_LINE_COUNT = 8
 CONFIG_USE_CUSTOM_DISASSEMBLY_FORMAT = 1
 CONFIG_DISPLAY_STACK_WINDOW = 0
-CONFIG_DISPLAY_FLOW_WINDOW = 1
+CONFIG_DISPLAY_FLOW_WINDOW = 0
 CONFIG_ENABLE_REGISTER_SHORTCUTS = 1
 CONFIG_DISPLAY_DATA_WINDOW = 0
+
 # setup the logging level, which is a bitmask of any of the following possible values (don't use spaces, doesn't seem to work)
 #
 # LOG_VERBOSE LOG_PROCESS LOG_THREAD LOG_EXCEPTIONS LOG_SHLIB LOG_MEMORY LOG_MEMORY_DATA_SHORT LOG_MEMORY_DATA_LONG LOG_MEMORY_PROTECTIONS LOG_BREAKPOINTS LOG_EVENTS LOG_WATCHPOINTS
@@ -118,25 +112,46 @@ CONFIG_LOG_LEVEL = "LOG_NONE"
 # reference: https://lldb.llvm.org/formats.html
 CUSTOM_DISASSEMBLY_FORMAT = "\"{${function.initial-function}{${function.name-without-args}} @ {${module.file.basename}}:\n}{${function.changed}\n{${function.name-without-args}} @ {${module.file.basename}}:\n}{${current-pc-arrow} }${addr-file-or-load}: \""
 
-BLACK = 0
-RED = 1
-GREEN = 2
-YELLOW = 3
-BLUE = 4
-MAGENTA = 5
-CYAN = 6
-WHITE = 7
+# available color code
+BLACK     = 0
+RED       = 1
+GREEN     = 2
+YELLOW    = 3
+BLUE      = 4
+MAGENTA   = 5
+CYAN      = 6
+WHITE     = 7
+BOLD      = 8
+UNDERLINE = 9
+RESET     = 10
 
-COLOR_REGNAME = GREEN
-COLOR_REGVAL = BLACK
+# default colors - modify as you wish
+COLOR_REGVAL           = BLACK
+COLOR_REGNAME          = GREEN
+COLOR_CPUFLAGS         = RED
+COLOR_SEPARATOR        = BLUE
+COLOR_HIGHLIGHT_LINE   = RED
 COLOR_REGVAL_MODIFIED  = RED
-COLOR_SEPARATOR = BLUE
-COLOR_CPUFLAGS = RED
-COLOR_HIGHLIGHT_LINE = RED
+COLOR_SYMBOL_NAME      = BLUE
+COLOR_CURRENT_PC       = RED
 
 #
 # Don't mess after here unless you know what you are doing!
 #
+
+BLACK_COLOR   = "\033[30m"
+RED_COLOR     = "\033[31m"
+GREEN_COLOR   = "\033[32m"
+YELLOW_COLOR  = "\033[33m"
+BLUE_COLOR    = "\033[34m"
+MAGENTA_COLOR = "\033[35m"
+CYAN_COLOR    = "\033[36m"
+WHITE_COLOR   = "\033[37m"
+RESET_COLOR   = "\033[0m"
+BOLD_COLOR    = "\033[1m"
+UNDERLINE_COLOR = "\033[4m"
+
+COLOR_ARRAY = [ BLACK_COLOR, RED_COLOR, GREEN_COLOR, YELLOW_COLOR, BLUE_COLOR, MAGENTA_COLOR, CYAN_COLOR, WHITE_COLOR, BOLD_COLOR, UNDERLINE_COLOR, RESET_COLOR ]
 
 DATA_WINDOW_ADDRESS = 0
 
@@ -242,23 +257,23 @@ def __lldb_init_module(debugger, internal_dict):
     lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget ctx", res)
     lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget context", res)
     # commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.lldbinitcmds lldbinitcmds", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.IphoneConnect iphone", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_lldbinitcmds lldbinitcmds", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_IphoneConnect iphone", res)
     #
     # dump memory commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.db db", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.dw dw", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.dd dd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.dq dq", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.DumpInstructions u", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.findmem findmem", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_db db", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dw dw", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dd dd", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dq dq", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_DumpInstructions u", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_findmem findmem", res)
     #
     # Settings related commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.enable enable", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.disable disable", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.contextcodesize contextcodesize", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_enable enable", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_disable disable", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_contextcodesize contextcodesize", res)
     # a few settings aliases
     lldb.debugger.GetCommandInterpreter().HandleCommand("command alias enablesolib enable solib", res)
     lldb.debugger.GetCommandInterpreter().HandleCommand("command alias disablesolib disable solib", res)
@@ -267,46 +282,46 @@ def __lldb_init_module(debugger, internal_dict):
     #
     # Breakpoint related commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bhb bhb", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bht bht", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpt bpt", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpn bpn", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bhb bhb", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bht bht", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpt bpt", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpn bpn", res)
     # disable a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpd bpd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpda bpda", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpd bpd", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpda bpda", res)
     # clear a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpc bpc", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpc bpc", res)
     lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bpca breakpoint delete", res)
     # enable a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpe bpe", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.bpea bpea", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpe bpe", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpea bpea", res)
     # commands to set temporary int3 patches and restore original bytes
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.int3 int3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rint3 rint3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.listint3 listint3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.nop nop", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.null null", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_int3 int3", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rint3 rint3", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_listint3 listint3", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_nop nop", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_null null", res)
     # change eflags commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfa cfa", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfc cfc", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfd cfd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfi cfi", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfo cfo", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfp cfp", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfs cfs", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cft cft", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cfz cfz", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfa cfa", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfc cfc", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfd cfd", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfi cfi", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfo cfo", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfp cfp", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfs cfs", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cft cft", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfz cfz", res)
     # skip/step current instruction commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.skip skip", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.stepo stepo", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.si si", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_skip skip", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_stepo stepo", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_si si", res)
     # load breakpoints from file
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.LoadBreakPoints lb", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.LoadBreakPointsRva lbrva", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_LoadBreakPoints lb", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
     # cracking friends
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.crack crack", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.crackcmd crackcmd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.crackcmd_noret crackcmd_noret", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crack crack", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crackcmd crackcmd", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crackcmd_noret crackcmd_noret", res)
     # alias for existing breakpoint commands
     # list all breakpoints
     lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bpl breakpoint list", res)
@@ -317,53 +332,53 @@ def __lldb_init_module(debugger, internal_dict):
     # launch process and stop at entrypoint (not exactly as gdb command that just inserts breakpoint)
     # usually it will be inside dyld and not the target main()
     lldb.debugger.GetCommandInterpreter().HandleCommand("command alias break_entrypoint process launch --stop-at-entry", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.show_loadcmds show_loadcmds", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.show_header show_header", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.tester tester", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.datawin datawin", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_show_loadcmds show_loadcmds", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_show_header show_header", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_tester tester", res)
+    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_datawin datawin", res)
     # shortcut command to modify registers content
     if CONFIG_ENABLE_REGISTER_SHORTCUTS == 1:
         # x64
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rip rip", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rax rax", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rbx rbx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rbp rbp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rsp rsp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rdi rdi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rsi rsi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rdx rdx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.rcx rcx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r8 r8", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r9 r9", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r10 r10", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r11 r11", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r12 r12", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r13 r13", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r14 r14", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.r15 r15", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rip rip", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rax rax", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rbx rbx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rbp rbp", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rsp rsp", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rdi rdi", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rsi rsi", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rdx rdx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rcx rcx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r8 r8", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r9 r9", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r10 r10", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r11 r11", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r12 r12", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r13 r13", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r14 r14", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r15 r15", res)
         # x86
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.eip eip", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.eax eax", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.ebx ebx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.ebp ebp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.esp esp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.edi edi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.esi esi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.edx edx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.ecx ecx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_eip eip", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_eax eax", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ebx ebx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ebp ebp", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_esp esp", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_edi edi", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_esi esi", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_edx edx", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ecx ecx", res)
 
     if CONFIG_KEYSTONE_AVAILABLE == 1:
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.asm32 asm32", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.asm64 asm64", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.arm32 arm32", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.arm64 arm64", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.armthumb armthumb", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_asm32 asm32", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_asm64 asm64", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_arm32 arm32", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_arm64 arm64", res)
+        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_armthumb armthumb", res)
     # add the hook - we don't need to wait for a target to be loaded
     lldb.debugger.GetCommandInterpreter().HandleCommand("target stop-hook add -o \"HandleHookStopOnTarget\"", res)
     
     return
 
-def lldbinitcmds(debugger, command, result, dict):
+def cmd_lldbinitcmds(debugger, command, result, dict):
     '''Display all available lldbinit commands.'''
 
     help_table = [
@@ -421,7 +436,7 @@ def lldbinitcmds(debugger, command, result, dict):
     print("\nUse \'cmdname help\' for extended command help.")
 
 # placeholder to make tests
-def tester(debugger, command, result, dict):
+def cmd_tester(debugger, command, result, dict):
     print("test")
     #frame = get_frame()
     # the SBValue to ReturnFromFrame must be eValueTypeRegister type
@@ -433,11 +448,11 @@ def tester(debugger, command, result, dict):
     #thread.ReturnFromFrame(frame, return_value)
 
 
-#
+# -------------------------
 # Settings related commands
-#
+# -------------------------
 
-def enable(debugger, command, result, dict):
+def cmd_enable(debugger, command, result, dict):
     '''Enable certain lldb and lldbinit options. Use \'enable help\' for more information.'''
     help = """
 Enable certain lldb and lldbinit configuration options.
@@ -471,7 +486,7 @@ Available settings:
     elif cmd[0] == "solib":
         debugger.HandleCommand("settings set target.process.stop-on-sharedlibrary-events true")
         print("[+] Enabled stop on library events trick.")
-    elif cmd[0] == "aslr:":
+    elif cmd[0] == "aslr":
         debugger.HandleCommand("settings set target.disable-aslr false")
         print("[+] Enabled ASLR.")
     elif cmd[0] == "stackwin":
@@ -491,7 +506,7 @@ Available settings:
 
     return
 
-def disable(debugger, command, result, dict):
+def cmd_disable(debugger, command, result, dict):
     '''Disable certain lldb and lldbinit options. Use \'disable help\' for more information.'''
     help = """
 Disable certain lldb and lldbinit configuration options.
@@ -545,7 +560,7 @@ Available settings:
 
     return
 
-def contextcodesize(debugger, command, result, dict): 
+def cmd_contextcodesize(debugger, command, result, dict): 
     '''Set the number of disassembly lines in code window. Use \'contextcodesize help\' for more information.'''
     help = """
 Configures the number of disassembly lines displayed in code window.
@@ -579,70 +594,28 @@ Note: expressions supported, do not use spaces between operators.
 
     return
 
-#
-# End Settings related commands
-#
-
-#
+# ---------------------------------
 # Color and output related commands
-#
-
-def color_reset():
-    output("\033[0m")
-
-def color_bold():
-    if CONFIG_ENABLE_COLOR == 0:
-        output("")
-        return
-
-    output("\033[1m")
-
-def color_underline():
-    if CONFIG_ENABLE_COLOR == 0:
-        output("")
-        return
-
-    output("\033[4m")
+# ---------------------------------
 
 def color(x):
     out_col = ""
     if CONFIG_ENABLE_COLOR == 0:
         output(out_col)
-        return
-            
-    if x == BLACK:
-        out_col = "\033[30m"
-    elif x == RED:
-        out_col = "\033[31m"
-    elif x == GREEN:
-        out_col = "\033[32m"
-    elif x == YELLOW:
-        out_col = "\033[33m"
-    elif x == BLUE:
-        out_col = "\033[34m"
-    elif x == MAGENTA:
-        out_col = "\033[35m"
-    elif x == CYAN:
-        out_col = "\033[36m"
-    elif x == WHITE:
-        out_col = "\033[37m"
-    output(out_col)
+        return    
+    output(COLOR_ARRAY[x])
 
 # append data to the output that we display at the end of the hook-stop
 def output(x):
     global GlobalListOutput
     GlobalListOutput.append(x)
 
-#
-# End Color related commands
-#
-
-#
+# ---------------------------
 # Breakpoint related commands
-#
+# ---------------------------
 
 # temporary software breakpoint
-def bpt(debugger, command, result, dict):
+def cmd_bpt(debugger, command, result, dict):
     '''Set a temporary software breakpoint. Use \'bpt help\' for more information.'''
     help = """
 Set a temporary software breakpoint.
@@ -677,7 +650,7 @@ Note: expressions supported, do not use spaces between operators.
     print("[+] Set temporary breakpoint at 0x{:x}".format(value))
     
 # hardware breakpoint
-def bhb(debugger, command, result, dict):
+def cmd_bhb(debugger, command, result, dict):
     '''Set an hardware breakpoint'''
     help = """
 Set an hardware breakpoint.
@@ -713,13 +686,13 @@ Note: expressions supported, do not use spaces between operators.
     return
 
 # temporary hardware breakpoint
-def bht(debugger, command, result, dict):
+def cmd_bht(debugger, command, result, dict):
     '''Set a temporary hardware breakpoint'''
     print("[-] error: lldb has no x86/x64 temporary hardware breakpoints implementation.")
     return
 
 # clear breakpoint number
-def bpc(debugger, command, result, dict):
+def cmd_bpc(debugger, command, result, dict):
     '''Clear a breakpoint. Use \'bpc help\' for more information.'''
     help = """
 Clear a breakpoint.
@@ -763,7 +736,7 @@ Note: expressions supported, do not use spaces between operators.
 
 # disable breakpoint number
 # XXX: we could support addresses, not sure it's worth the trouble
-def bpd(debugger, command, result, dict):
+def cmd_bpd(debugger, command, result, dict):
     '''Disable a breakpoint. Use \'bpd help\' for more information.'''
     help = """
 Disable a breakpoint.
@@ -800,7 +773,7 @@ Note: expressions supported, do not use spaces between operators.
             print("[+] Disabled breakpoint #{:d}".format(value))
 
 # disable all breakpoints
-def bpda(debugger, command, result, dict):
+def cmd_bpda(debugger, command, result, dict):
     '''Disable all breakpoints. Use \'bpda help\' for more information.'''
     help = """
 Disable all breakpoints.
@@ -826,7 +799,7 @@ Syntax: bpda
     print("[+] Disabled all breakpoints.")
 
 # enable breakpoint number
-def bpe(debugger, command, result, dict):
+def cmd_bpe(debugger, command, result, dict):
     '''Enable a breakpoint. Use \'bpe help\' for more information.'''
     help = """
 Enable a breakpoint.
@@ -863,7 +836,7 @@ Note: expressions supported, do not use spaces between operators.
             print("[+] Enabled breakpoint #{:d}".format(value))
 
 # enable all breakpoints
-def bpea(debugger, command, result, dict):
+def cmd_bpea(debugger, command, result, dict):
     '''Enable all breakpoints. Use \'bpea help\' for more information.'''
     help = """
 Enable all breakpoints.
@@ -889,7 +862,7 @@ Syntax: bpea
     print("[+] Enabled all breakpoints.")
 
 # skip current instruction - just advances PC to next instruction but doesn't execute it
-def skip(debugger, command, result, dict):
+def cmd_skip(debugger, command, result, dict):
     '''Advance PC to instruction at next address. Use \'skip help\' for more information.'''
     help = """
 Advance current instruction pointer to next instruction.
@@ -920,7 +893,7 @@ Note: control flow is not respected, it advances to next instruction in memory.
     lldb.debugger.HandleCommand("context")
 
 # XXX: ARM breakpoint
-def int3(debugger, command, result, dict):
+def cmd_int3(debugger, command, result, dict):
     '''Patch byte at address to an INT3 (0xCC) instruction. Use \'int3 help\' for more information.'''
     help = """
 Patch process memory with an INT3 byte at given address.
@@ -980,7 +953,7 @@ Note: expressions supported, do not use spaces between operators.
     print("[+] Patched INT3 at 0x{:x}".format(int3_addr))
     return
 
-def rint3(debugger, command, result, dict):
+def cmd_rint3(debugger, command, result, dict):
     '''Restore byte at address from a previously patched INT3 (0xCC) instruction. Use \'rint3 help\' for more information.'''
     help = """
 Restore the original byte at a previously patched address using \'int3\' command.
@@ -1048,7 +1021,7 @@ Note: expressions supported, do not use spaces between operators.
 
     return
 
-def listint3(debugger, command, result, dict):
+def cmd_listint3(debugger, command, result, dict):
     '''List all patched INT3 (0xCC) instructions. Use \'listint3 help\' for more information.'''
     help = """
 List all addresses patched with \'int3\' command.
@@ -1077,7 +1050,7 @@ Syntax: listint3
     return
 
 # XXX: ARM NOPs
-def nop(debugger, command, result, dict):
+def cmd_nop(debugger, command, result, dict):
     '''NOP byte(s) at address. Use \'nop help\' for more information.'''
     help = """
 Patch process memory with NOP (0x90) byte(s) at given address.
@@ -1138,7 +1111,7 @@ Note: expressions supported, do not use spaces between operators.
 
     return
 
-def null(debugger, command, result, dict):
+def cmd_null(debugger, command, result, dict):
     '''Patch byte(s) at address to NULL (0x00). Use \'null help\' for more information.'''
     help = """
 Patch process memory with NULL (0x00) byte(s) at given address.
@@ -1199,7 +1172,7 @@ Note: expressions supported, do not use spaces between operators.
 '''
     Implements stepover instruction.    
 '''
-def stepo(debugger, command, result, dict):
+def cmd_stepo(debugger, command, result, dict):
     '''Step over calls and some other instructions so we don't need to step into them. Use \'stepo help\' for more information.'''
     help = """
 Step over calls and loops that we want executed but not step into.
@@ -1260,7 +1233,7 @@ Syntax: stepo
         get_process().selected_thread.StepInstruction(False)
 
 # XXX: help
-def LoadBreakPointsRva(debugger, command, result, dict):
+def cmd_LoadBreakPointsRva(debugger, command, result, dict):
     global  GlobalOutputList
     GlobalOutputList = []
     '''
@@ -1312,7 +1285,7 @@ def LoadBreakPointsRva(debugger, command, result, dict):
 
 
 # XXX: help
-def LoadBreakPoints(debugger, command, result, dict):
+def cmd_LoadBreakPoints(debugger, command, result, dict):
     global GlobalOutputList
     GlobalOutputList = []
 
@@ -1333,7 +1306,7 @@ def LoadBreakPoints(debugger, command, result, dict):
     f.close()
 
 # Temporarily breakpoint next instruction - this is useful to skip loops (don't want to use stepo for this purpose)
-def bpn(debugger, command, result, dict):
+def cmd_bpn(debugger, command, result, dict):
     '''Temporarily breakpoint instruction at next address. Use \'bpn help\' for more information.'''
     help = """
 Temporarily breakpoint instruction at next address
@@ -1365,7 +1338,7 @@ Note: control flow is not respected, it breakpoints next instruction in memory.
 
 # command that sets rax to 1 or 0 and returns right away from current function
 # technically just a shortcut to "thread return"
-def crack(debugger, command, result, dict):
+def cmd_crack(debugger, command, result, dict):
     '''Return from current function and set return value. Use \'crack help\' for more information.'''
     help = """
 Return from current function and set return value
@@ -1407,7 +1380,7 @@ You probably want to use this at the top of the function you want to return from
     get_thread().ReturnFromFrame(frame, return_value)
 
 # set a breakpoint with return command associated when hit
-def crackcmd(debugger, command, result, dict):
+def cmd_crackcmd(debugger, command, result, dict):
     '''Breakpoint an address, when breakpoint is hit return from function and set return value. Use \'crackcmd help\' for more information.'''
     help = """
 Breakpoint an address, when breakpoint is hit return from function and set return value.
@@ -1495,7 +1468,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
     get_process().Continue()
 
 # set a breakpoint with a command that doesn't return, just sets the specified register to a value
-def crackcmd_noret(debugger, command, result, dict):
+def cmd_crackcmd_noret(debugger, command, result, dict):
     '''Set a breakpoint and a register to a value when hit. Use \'crackcmd_noret help\' for more information.'''
     help = """
 Set a breakpoint and a register to a value when hit.
@@ -1583,19 +1556,15 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
     frame.reg[crack_entry['register']].value = str(crack_entry['value']).rstrip('L')
     get_process().Continue()
 
-#
-# End Breakpoint related commands
-#
-
-#
+# -----------------------
 # Memory related commands
-#
+# -----------------------
 
 '''
     Output nice memory hexdumps...
 '''
 # display byte values and ASCII characters
-def db(debugger, command, result, dict):
+def cmd_db(debugger, command, result, dict):
     '''Display hex dump in byte values and ASCII characters. Use \'db help\' for more information.'''
     help = """
 Display memory hex dump in byte length and ASCII representation.
@@ -1651,9 +1620,9 @@ Note: expressions supported, do not use spaces between operators.
     else:
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("------------------------------------------------------")
-    color_bold()
+    color(BOLD)
     output("[data]")
-    color_reset()
+    color(RESET)
     output("\n")        
     #output(hexdump(dump_addr, membuff, " ", 16));
     index = 0
@@ -1688,14 +1657,14 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color_reset()
+    color(RESET)
     #last element of the list has all data output...
     #so we remove last \n
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display word values and ASCII characters
-def dw(debugger, command, result, dict):
+def cmd_dw(debugger, command, result, dict):
     ''' Display hex dump in word values and ASCII characters. Use \'dw help\' for more information.'''
     help = """
 Display memory hex dump in word length and ASCII representation.
@@ -1752,9 +1721,9 @@ Note: expressions supported, do not use spaces between operators.
     else: #is_x64():
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("--------------------------------------------")
-    color_bold()
+    color(BOLD)
     output("[data]")
-    color_reset()
+    color(RESET)
     output("\n")
     index = 0
     while index < 0x100:
@@ -1777,12 +1746,12 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color_reset()
+    color(RESET)
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display dword values and ASCII characters
-def dd(debugger, command, result, dict):
+def cmd_dd(debugger, command, result, dict):
     ''' Display hex dump in double word values and ASCII characters. Use \'dd help\' for more information.'''
     help = """
 Display memory hex dump in double word length and ASCII representation.
@@ -1838,9 +1807,9 @@ Note: expressions supported, do not use spaces between operators.
     else: #is_x64():
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("----------------------------------------")
-    color_bold()
+    color(BOLD)
     output("[data]")
-    color_reset()
+    color(RESET)
     output("\n")
     index = 0
     while index < 0x100:
@@ -1859,12 +1828,12 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color_reset()
+    color(RESET)
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display quad values
-def dq(debugger, command, result, dict):
+def cmd_dq(debugger, command, result, dict):
     ''' Display hex dump in quad values. Use \'dq help\' for more information.'''
     help = """
 Display memory hex dump in quad word length.
@@ -1925,9 +1894,9 @@ Note: expressions supported, do not use spaces between operators.
     else:
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("-------------------------------------------------------")
-    color_bold()
+    color(BOLD)
     output("[data]")
-    color_reset()
+    color(RESET)
     output("\n")   
     index = 0
     while index < 0x100:
@@ -1941,7 +1910,7 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x20
         dump_addr += 0x20
-    color_reset()
+    color(RESET)
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -1974,7 +1943,7 @@ def quotechars( chars ):
     return data
 
 # XXX: help
-def findmem(debugger, command, result, dict):
+def cmd_findmem(debugger, command, result, dict):
     '''Search memory'''
     help == """
 [options]
@@ -2102,16 +2071,16 @@ def findmem(debugger, command, result, dict):
             else:
                 ptrformat = "%.016lX"
 
-            color_reset()
+            color(RESET)
             output("Found at : ")
             color(GREEN)
             output(ptrformat % (mem_start + off))
-            color_reset()
+            color(RESET)
             if base_displayed == 0:
                 output(" base : ")
                 color(YELLOW)
                 output(ptrformat % mem_start)
-                color_reset()
+                color(RESET)
                 base_displayed = 1
             else:
                 output("        ")
@@ -2127,7 +2096,7 @@ def findmem(debugger, command, result, dict):
             off += len(search_string)
     return
 
-def datawin(debugger, command, result, dict):
+def cmd_datawin(debugger, command, result, dict):
     '''Configure address to display in data window. Use \'datawin help\' for more information.'''
     help = """
 Configure address to display in data window.
@@ -2160,13 +2129,9 @@ Note: expressions supported, do not use spaces between operators.
         return
     DATA_WINDOW_ADDRESS = dump_addr
 
-#
-# End Memory related commands
-#
-
-#
+# ----------------------------------------------------------
 # Functions to extract internal and process lldb information
-#
+# ----------------------------------------------------------
 
 def get_arch():
     return lldb.debugger.GetSelectedTarget().triple.split('-')[0]
@@ -2212,35 +2177,29 @@ def get_process():
 # evaluate an expression and return the value it represents
 def evaluate(command):
     frame = get_frame()
-
+    if frame != None:
+        value = frame.EvaluateExpression(command)
+        if value.IsValid() == False:
+            return None
+        try:
+            value = int(value.GetValue(), base=10)
+            return value
+        except Exception as e:
+            print("Exception on evaluate: " + str(e))
+            return None
     # use the target version - if no target exists we can't do anything about it
-    if frame == None:
-        return evaluate_target(command)
-    
-    value = frame.EvaluateExpression(command)
-    if value.IsValid() == False:
-        return None
-    try:
-        value = int(value.GetValue(), base=10)
-        return value
-    except Exception as e:
-        print("Exception on evaluate: " + str(e))
-        return None
-
-# evaluate expression under target context instead of frame, for cases where frame is not available (target not started for example)
-def evaluate_target(command):
-    target = get_target()
-    if target == None:
-        return None
-    
-    value = target.EvaluateExpression(command)
-    if value.IsValid() == False:
-        return None
-    try:
-        value = long(value.GetValue(), 10)
-        return value
-    except:
-        return None
+    else:
+        target = get_target()    
+        if target == None:
+            return None
+        value = target.EvaluateExpression(command)
+        if value.IsValid() == False:
+            return None
+        try:
+            value = int(value.GetValue(), base=10)
+            return value
+        except:
+            return None
 
 def is_i386():
     arch = get_arch()
@@ -2276,13 +2235,10 @@ def get_instance_object():
         instanceObject = None
   
     return instanceObject
-#
-# End Functions to extract internal and process lldb information
-#
 
-#
+# -------------------------
 # Register related commands
-#
+# -------------------------
 
 # return the int value of a general purpose register
 def get_gp_register(reg_name):
@@ -2308,24 +2264,22 @@ def get_registers(kind):
 
     Returns None if there's no such kind.
     """
-    registerSet = get_frame().GetRegisters() # Return type of SBValueList.
+    frame = get_frame()
+    if frame == None:
+        return None
+    registerSet = frame.GetRegisters() # Return type of SBValueList.
     for value in registerSet:
         if kind.lower() in value.GetName().lower():
             return value
-
     return None
 
-# retrieve current instruction pointer via registers information
-# XXX: add ARM
+# retrieve current instruction pointer via platform independent $pc register
 def get_current_pc():
-    if is_i386():
-        pc_addr = get_gp_register("eip")
-    elif is_x64():
-        pc_addr = get_gp_register("rip")
-    else:
-        print("[-] error: wrong architecture.")
+    frame = get_frame()
+    if frame == None:
         return 0
-    return pc_addr
+    pc = frame.FindRegister("pc")
+    return int(pc.GetValue(), 16)
 
 # retrieve current stack pointer via registers information
 # XXX: add ARM
@@ -2371,87 +2325,88 @@ Where value can be a single value or an expression.
     get_frame().reg[register].value = format(value, '#x')
 
 # shortcut functions to modify each register
-def rip(debugger, command, result, dict):
+def cmd_rip(debugger, command, result, dict):
     update_register("rip", command)
 
-def rax(debugger, command, result, dict):
+def cmd_rax(debugger, command, result, dict):
     update_register("rax", command)
 
-def rbx(debugger, command, result, dict):
+def cmd_rbx(debugger, command, result, dict):
     update_register("rbx", command)
 
-def rbp(debugger, command, result, dict):
+def cmd_rbp(debugger, command, result, dict):
     update_register("rbp", command)
 
-def rsp(debugger, command, result, dict):
+def cmd_rsp(debugger, command, result, dict):
     update_register("rsp", command)
 
-def rdi(debugger, command, result, dict):
+def cmd_rdi(debugger, command, result, dict):
     update_register("rdi", command)
 
-def rsi(debugger, command, result, dict):
+def cmd_rsi(debugger, command, result, dict):
     update_register("rsi", command)
 
-def rdx(debugger, command, result, dict):
+def cmd_rdx(debugger, command, result, dict):
     update_register("rdx", command)
 
-def rcx(debugger, command, result, dict):
+def cmd_rcx(debugger, command, result, dict):
     update_register("rcx", command)
 
-def r8(debugger, command, result, dict):
+def cmd_r8(debugger, command, result, dict):
     update_register("r8", command)
 
-def r9(debugger, command, result, dict):
+def cmd_r9(debugger, command, result, dict):
     update_register("r9", command)
 
-def r10(debugger, command, result, dict):
+def cmd_r10(debugger, command, result, dict):
     update_register("r10", command)
 
-def r11(debugger, command, result, dict):
+def cmd_r11(debugger, command, result, dict):
     update_register("r11", command)
 
-def r12(debugger, command, result, dict):
+def cmd_r12(debugger, command, result, dict):
     update_register("r12", command)
 
-def r13(debugger, command, result, dict):
+def cmd_r13(debugger, command, result, dict):
     update_register("r13", command)
 
-def r14(debugger, command, result, dict):
+def cmd_r14(debugger, command, result, dict):
     update_register("r14", command)
 
-def r15(debugger, command, result, dict):
+def cmd_r15(debugger, command, result, dict):
     update_register("r15", command)
 
-def eip(debugger, command, result, dict):
+def cmd_eip(debugger, command, result, dict):
     update_register("eip", command)
 
-def eax(debugger, command, result, dict):
+def cmd_eax(debugger, command, result, dict):
     update_register("eax", command)
 
-def ebx(debugger, command, result, dict):
+def cmd_ebx(debugger, command, result, dict):
     update_register("ebx", command)
 
-def ebp(debugger, command, result, dict):
+def cmd_ebp(debugger, command, result, dict):
     update_register("ebp", command)
 
-def esp(debugger, command, result, dict):
+def cmd_esp(debugger, command, result, dict):
     update_register("esp", command)
 
-def edi(debugger, command, result, dict):
+def cmd_edi(debugger, command, result, dict):
     update_register("edi", command)
 
-def esi(debugger, command, result, dict):
+def cmd_esi(debugger, command, result, dict):
     update_register("esi", command)
 
-def edx(debugger, command, result, dict):
+def cmd_edx(debugger, command, result, dict):
     update_register("edx", command)
 
-def ecx(debugger, command, result, dict):
+def cmd_ecx(debugger, command, result, dict):
     update_register("ecx", command)
 
-#
+# -----------------------------
 # modify eflags/rflags commands
-#
+# -----------------------------
+
 def modify_eflags(register):
     # read the current value so we can modify it
     if is_x64():
@@ -2514,7 +2469,7 @@ def modify_eflags(register):
     elif is_i386():
         get_frame().reg["eflags"].value = format(eflags, '#x')
 
-def cfa(debugger, command, result, dict):
+def cmd_cfa(debugger, command, result, dict):
     '''Change adjust flag. Use \'cfa help\' for more information.'''
     help = """
 Flip current adjust flag.
@@ -2534,7 +2489,7 @@ Syntax: cfa
     
     modify_eflags("a")
 
-def cfc(debugger, command, result, dict):
+def cmd_cfc(debugger, command, result, dict):
     '''Change carry flag. Use \'cfc help\' for more information.'''
     help = """
 Flip current carry flag.
@@ -2554,7 +2509,7 @@ Syntax: cfc
 
     modify_eflags("c")
 
-def cfd(debugger, command, result, dict):
+def cmd_cfd(debugger, command, result, dict):
     '''Change direction flag. Use \'cfd help\' for more information.'''
     help = """
 Flip current direction flag.
@@ -2574,7 +2529,7 @@ Syntax: cfd
     
     modify_eflags("d")
 
-def cfi(debugger, command, result, dict):
+def cmd_cfi(debugger, command, result, dict):
     '''Change interrupt flag. Use \'cfi help\' for more information.'''
     help = """
 Flip current interrupt flag.
@@ -2594,7 +2549,7 @@ Syntax: cfi
 
     modify_eflags("i")
 
-def cfo(debugger, command, result, dict):
+def cmd_cfo(debugger, command, result, dict):
     '''Change overflow flag. Use \'cfo help\' for more information.'''
     help = """
 Flip current overflow flag.
@@ -2614,7 +2569,7 @@ Syntax: cfo
 
     modify_eflags("o")
 
-def cfp(debugger, command, result, dict):
+def cmd_cfp(debugger, command, result, dict):
     '''Change parity flag. Use \'cfp help\' for more information.'''
     help = """
 Flip current parity flag.
@@ -2634,7 +2589,7 @@ Syntax: cfp
 
     modify_eflags("p")
 
-def cfs(debugger, command, result, dict):
+def cmd_cfs(debugger, command, result, dict):
     '''Change sign flag. Use \'cfs help\' for more information.'''
     help = """
 Flip current sign flag.
@@ -2654,7 +2609,7 @@ Syntax: cfs
 
     modify_eflags("s")
 
-def cft(debugger, command, result, dict):
+def cmd_cft(debugger, command, result, dict):
     '''Change trap flag. Use \'cft help\' for more information.'''
     help = """
 Flip current trap flag.
@@ -2674,7 +2629,7 @@ Syntax: cft
 
     modify_eflags("t")
 
-def cfz(debugger, command, result, dict):
+def cmd_cfz(debugger, command, result, dict):
     '''Change zero flag. Use \'cfz help\' for more information.'''
     help = """
 Flip current zero flag.
@@ -2693,10 +2648,6 @@ Syntax: cfz
         return
 
     modify_eflags("z")
-
-#
-# end modify eflags/rflags commands
-#
 
 def dump_eflags(eflags):
     if (eflags >> 0xB) & 1:
@@ -2927,7 +2878,7 @@ def dump_jumpx86(eflags):
     else:
         output(output_string)
 
-    color_reset()
+    color(RESET)
 
 def reg64():
     global old_cs
@@ -3014,11 +2965,11 @@ def reg64():
     old_rsp = rsp
     
     output("  ")
-    color_bold()
-    color_underline()
+    color(BOLD)
+    color(UNDERLINE)
     color(COLOR_CPUFLAGS)
     dump_eflags(rflags)
-    color_reset()
+    color(RESET)
     
     output("\n")
             
@@ -3233,11 +3184,11 @@ def reg32():
     
     output("  ")
     eflags = get_gp_register("eflags")
-    color_bold()
-    color_underline()
+    color(BOLD)
+    color(UNDERLINE)
     color(COLOR_CPUFLAGS)
     dump_eflags(eflags)
-    color_reset()
+    color(RESET)
     
     output("\n")
     
@@ -3467,12 +3418,12 @@ def regarm():
     old_arm_r3 = r3
     
     output(" ")
-    color_bold()
-    color_underline()
+    color(BOLD)
+    color(UNDERLINE)
     color(COLOR_CPUFLAGS)
     cpsr = get_gp_register("cpsr")
     dump_cpsr(cpsr)
-    color_reset()
+    color(RESET)
 
     output("\n")
     
@@ -3610,10 +3561,6 @@ def print_registers():
     elif is_arm():
         regarm()
 
-#
-# End Register related commands
-#
-
 '''
     si, c, r instruction override deault ones to consume their output.
     For example:
@@ -3622,7 +3569,7 @@ def print_registers():
         to nicely display informations in our hook-stop
     Same goes for c and r (continue and run)
 '''
-def si(debugger, command, result, dict):
+def cmd_si(debugger, command, result, dict):
     debugger.SetAsync(True)
     res = lldb.SBCommandReturnObject()
     lldb.debugger.GetSelectedTarget().process.selected_thread.StepInstruction(False)
@@ -3634,53 +3581,40 @@ def c(debugger, command, result, dict):
     lldb.debugger.GetSelectedTarget().GetProcess().Continue()
     result.SetStatus(lldb.eReturnStatusSuccessFinishNoResult)
 
-#
+# ------------------------------
 # Disassembler related functions
-#
+# ------------------------------
 
 '''
     Handles 'u' command which displays instructions. Also handles output of
     'disassemble' command ...
 '''
 # XXX: help
-def DumpInstructions(debugger, command, result, dict):
+def cmd_DumpInstructions(debugger, command, result, dict):
     '''Dump instructions at certain address (SoftICE like u command style)'''
     help = """ """
 
     global GlobalListOutput
-    global arm_type
     GlobalListOutput = []
     
-    if is_arm():
-        cpsr = get_gp_register("cpsr")
-        t = (cpsr >> 5) & 1
-        if t:
-            #it's thumb
-            arm_type = "thumbv7-apple-ios"
-        else:
-            arm_type = "armv7-apple-ios"
-    res = lldb.SBCommandReturnObject()
+    target = get_target()
     cmd = command.split()
     if len(cmd) == 0 or len(cmd) > 2:
-        if is_arm():
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -A " +arm_type + " --start-address=$pc --count=8", res)
-        else:
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=$pc --count=8", res)
+        disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
     elif len(cmd) == 1:
-        if is_arm():
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -A "+arm_type+" --start-address=" + cmd[0] + " --count=8", res)
-        else:
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=" + cmd[0] + " --count=8", res)
+        address = evaluate(cmd[0])
+        if address == None:
+            return
+        disassemble(address, CONFIG_DISASSEMBLY_LINE_COUNT)
     else:
-        if is_arm():
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -A "+arm_type+" --start-address=" + cmd[0] + " --count="+cmd[1], res)
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=" + cmd[0] + " --count="+cmd[1], res)
-        
-    if res.Succeeded() == True:
-        output(res.GetOutput())
-    else:
-        output("[-] Error getting instructions for : " + command)
-    
+        address = evaluate(cmd[0])
+        if address == None:
+            return
+        count = evaluate(cmd[1])
+        if count == None:
+            return
+        disassemble(address, count)
+
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -3701,19 +3635,19 @@ def get_mnemonic(target_addr):
     return mnemonic
 
 # returns the instruction operands
-def get_operands(target_addr):
+def get_operands(source_address):
     err = lldb.SBError()
     target = get_target()
-
-    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, 'intel')
+    # use current memory address
+    # needs to be this way to workaround SBAddress init bug
+    src_sbaddr = lldb.SBAddress()
+    src_sbaddr.load_addr = source_address
+    instruction_list = target.ReadInstructions(src_sbaddr, 1, 'intel')
     if instruction_list.GetSize() == 0:
         print("[-] error: not enough instructions disassembled.")
-        return ""
-    
-    cur_instruction = instruction_list.GetInstructionAtIndex(0)
-    operands = cur_instruction.GetOperands(target)
-
-    return operands
+        return ""    
+    cur_instruction = instruction_list[0]
+    return cur_instruction.operands
 
 # find out the size of an instruction using internal disassembler
 def get_inst_size(target_addr):
@@ -3728,15 +3662,175 @@ def get_inst_size(target_addr):
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
     return cur_instruction.size
 
-#
-# End Disassembler related functions
-#
+# the disassembler we use on stop context
+# we can customize output here instead of using the cmdline as before and grabbing its output
+def disassemble(start_address, count):
+    target = get_target()
+    if target == None:
+        return
+    # this init will set a file_addr instead of expected load_addr
+    # and so the disassembler output will be referenced to the file address
+    # instead of the current loaded memory address
+    # this is annoying because all RIP references will be related to file addresses
+    file_sbaddr = lldb.SBAddress(start_address, target)
+    # create a SBAddress object with the load_addr set so we can disassemble with
+    # current memory addresses and what is happening right now
+    # we use the empty init and then set the property which is read/write for load_addr
+    # this whole thing seems like a bug?
+    mem_sbaddr = lldb.SBAddress()
+    mem_sbaddr.load_addr = start_address
+    # disassemble to get the file and memory version
+    # we could compute this by finding sections etc but this way it seems
+    # much simpler and faster
+    # this seems to be a bug or missing feature because there is no way
+    # to distinguish between the load and file addresses in the disassembler
+    # the reason might be because we can't create a SBAddress that has
+    # load_addr and file_addr set so that the disassembler can distinguish them
+    # somehow when we use file_sbaddr object the SBAddress GetLoadAddress()
+    # retrieves the correct memory address for the instruction while the
+    # SBAddress GetFileAddress() retrives the correct file address
+    # but the branch instructions addresses are the file addresses
+    # bug on SBAddress init implementation???
+    # this also has problems with symbols - the memory version doesn't have them
+    instructions_mem = target.ReadInstructions(mem_sbaddr, count, "intel")
+    instructions_file = target.ReadInstructions(file_sbaddr, count, "intel")
+    if instructions_mem.GetSize() != instructions_file.GetSize():
+        print("[-] error: instructions arrays sizes are different.")
+        return
+    # find out the biggest instruction lenght and mnemonic length
+    # so we can have a uniform output
+    max_size = 0
+    max_mnem_size = 0
+    for i in instructions_mem:
+        if i.size > max_size:
+            max_size = i.size        
+        mnem_len = len(i.mnemonic)
+        if mnem_len > max_mnem_size:
+            max_mnem_size = mnem_len
+    
+    current_pc = get_current_pc()
+    # get info about module if there is a symbol
+    module = file_sbaddr.module
+    #module_name = module.file.GetFilename()
+    module_name = module.file.fullpath
 
-#
+    count = 0
+    blockstart_sbaddr = None
+    blockend_sbaddr = None
+    for mem_inst in instructions_mem:
+        # get the same instruction but from the file version because we need some info from it
+        file_inst = instructions_file[count]
+        # try to extract the symbol name from this location if it exists
+        # needs to be referenced to file because memory it doesn't work
+        symbol_name = instructions_file[count].addr.GetSymbol().GetName()
+        # if there is no symbol just display module where current instruction is
+        # also get rid of unnamed symbols since they are useless
+        if symbol_name == None or "___lldb_unnamed_symbol" in symbol_name:
+            if count == 0:
+                if CONFIG_ENABLE_COLOR == 1:
+                    color(COLOR_SYMBOL_NAME)
+                    output("@ {}:".format(module_name) + "\n")
+                    color(RESET)
+                else:
+                    output("@ {}:".format(module_name) + "\n")            
+        elif symbol_name != None:
+            # print the first time there is a symbol name and save its interval
+            # so we don't print again until there is a different symbol
+            if blockstart_sbaddr == None or (int(file_inst.addr) < int(blockstart_sbaddr)) or (int(file_inst.addr) >= int(blockend_sbaddr)):
+                if CONFIG_ENABLE_COLOR == 1:
+                    color(COLOR_SYMBOL_NAME)
+                    output("{} @ {}:".format(symbol_name, module_name) + "\n")
+                    color(RESET)
+                else:
+                    output("{} @ {}:".format(symbol_name, module_name) + "\n")
+                blockstart_sbaddr = file_inst.addr.GetSymbol().GetStartAddress()
+                blockend_sbaddr = file_inst.addr.GetSymbol().GetEndAddress()
+        
+        # get the instruction bytes formatted as uint8
+        inst_data = mem_inst.GetData(target).uint8
+        mnem = mem_inst.mnemonic
+        operands = mem_inst.operands
+        bytes_string = ""
+        total_fill = max_size - mem_inst.size
+        total_spaces = mem_inst.size - 1
+        for x in inst_data:
+            bytes_string += "{:02x}".format(x)
+            if total_spaces > 0:
+                bytes_string += " "
+                total_spaces -= 1
+        if total_fill > 0:
+            # we need one more space because the last byte doesn't have space
+            # and if we are smaller than max size we are one space short
+            bytes_string += "  " * total_fill
+            bytes_string += " " * total_fill
+        
+        mnem_len = len(mem_inst.mnemonic)
+        if mnem_len < max_mnem_size:
+            missing_spaces = max_mnem_size - mnem_len
+            mnem += " " * missing_spaces
+
+        # the address the current instruction is loaded at
+        # we need to extract the address of the instruction and then find its loaded address
+        memory_addr = mem_inst.addr.GetLoadAddress(target)
+        # the address of the instruction in the current module
+        # for main exe it will be the address before ASLR if enabled, otherwise the same as current
+        # for modules it will be the address in the module code, not the address it's loaded at
+        # so we can use this address to quickly get to current instruction in module loaded at a disassembler
+        # without having to rebase everything etc
+        #file_addr = mem_inst.addr.GetFileAddress()
+        file_addr = file_inst.addr.GetFileAddress()
+        
+        comment = ""
+        if file_inst.comment != "":
+            comment = " ; " + file_inst.comment
+
+        if current_pc == memory_addr:
+            # try to retrieve extra information if it's a branch instruction
+            # used to resolve indirect branches and try to extract Objective-C selectors
+            if mem_inst.DoesBranch():
+                flow_addr = get_indirect_flow_address(int(mem_inst.addr))
+                if flow_addr > 0:
+                    flow_module_name = get_module_name(flow_addr)
+                    symbol_info = ""
+                    # try to solve the symbol for the target address
+                    target_symbol_name = lldb.SBAddress(flow_addr,target).GetSymbol().GetName()
+                    # if there is a symbol append to the string otherwise
+                    # it will be empty and have no impact in output
+                    if target_symbol_name != None:
+                        symbol_info = target_symbol_name + " @ "
+                    
+                    if comment == "":
+                        # remove space for instructions without operands
+                        if mem_inst.operands == "":
+                            comment = "; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
+                        else:
+                            comment = " ; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
+                    else:
+                        comment = comment + " " + hex(flow_addr) + " @ " + flow_module_name
+                
+                objc = get_objectivec_selector(current_pc)
+                if objc != "":
+                    comment = comment + " -> " + objc
+
+            if CONFIG_ENABLE_COLOR == 1:
+                color(BOLD)
+                color(COLOR_CURRENT_PC)
+                output("->  0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
+                color(RESET)
+            else:
+                output("->  0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
+        else:
+            output("    0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
+
+        count += 1
+    
+    return
+
+# ------------------------------------
 # Commands that use external utilities
-#
+# ------------------------------------
 
-def show_loadcmds(debugger, command, result, dict): 
+def cmd_show_loadcmds(debugger, command, result, dict): 
     '''Show otool output of Mach-O load commands. Use \'show_loadcmds\' for more information.'''
     help = """
 Show otool output of Mach-O load commands.
@@ -3787,7 +3881,7 @@ Note: expressions supported, do not use spaces between operators.
 
     return
 
-def show_header(debugger, command, result, dict): 
+def cmd_show_header(debugger, command, result, dict): 
     '''Show otool output of Mach-O header. Use \'show_header\' for more information.'''
     help = """
 Show otool output of Mach-O header.
@@ -3860,7 +3954,7 @@ def assemble_keystone(arch, mode, code, syntax=0):
             output.append("{:02x}".format(i))
         print(" ".join(output))
 
-def asm32(debugger, command, result, dict):
+def cmd_asm32(debugger, command, result, dict):
     '''32 bit x86 interactive Keystone based assembler. Use \'asm32 help\' for more information.'''
     help = """
 32 bit x86 interactive Keystone based assembler.
@@ -3890,7 +3984,7 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
     
     assemble_keystone(KS_ARCH_X86, KS_MODE_32, inst_list)
 
-def asm64(debugger, command, result, dict):
+def cmd_asm64(debugger, command, result, dict):
     '''64 bit x86 interactive Keystone based assembler. Use \'asm64 help\' for more information.'''
     help = """
 64 bit x86 interactive Keystone based assembler
@@ -3920,7 +4014,7 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
     
     assemble_keystone(KS_ARCH_X86, KS_MODE_64, inst_list)
 
-def arm32(debugger, command, result, dict):
+def cmd_arm32(debugger, command, result, dict):
     '''32 bit ARM interactive Keystone based assembler. Use \'arm32 help\' for more information.'''
     help = """
 32 bit ARM interactive Keystone based assembler
@@ -3950,7 +4044,7 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
     
     assemble_keystone(KS_ARCH_ARM, KS_MODE_ARM, inst_list)
 
-def armthumb(debugger, command, result, dict):
+def cmd_armthumb(debugger, command, result, dict):
     '''32 bit ARM Thumb interactive Keystone based assembler. Use \'armthumb help\' for more information.'''
     help = """
 32 bit ARM Thumb interactive Keystone based assembler
@@ -3980,7 +4074,7 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
     
     assemble_keystone(KS_ARCH_ARM, KS_MODE_THUMB, inst_list)
 
-def arm64(debugger, command, result, dict):
+def cmd_arm64(debugger, command, result, dict):
     '''64 bit ARM interactive Keystone based assembler. Use \'arm64 help\' for more information.'''
     help = """
 64 bit ARM interactive Keystone based assembler
@@ -4010,12 +4104,8 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
     
     assemble_keystone(KS_ARCH_ARM64, KS_MODE_ARM, inst_list)
 
-#
-# End Commands that use external utilities
-#
-
 # XXX: help
-def IphoneConnect(debugger, command, result, dict): 
+def cmd_IphoneConnect(debugger, command, result, dict): 
     '''Connect to debugserver running on iPhone'''
     help = """ """
     global GlobalListOutput
@@ -4091,6 +4181,9 @@ def get_rip_relative_addr(source_address):
     if inst_size <= 1:
         print("[-] error: instruction size too small.")
         return 0
+    # XXX: problem because it's not just 2 and 5 bytes
+    # 0x7fff53fa2180 (0x1180): 0f 85 84 01 00 00     jne    0x7fff53fa230a ; stack_not_16_byte_aligned_error
+
     offset_bytes = get_process().ReadMemory(source_address+1, inst_size-1, err)
     if err.Success() == False:
         print("[-] error: Failed to read memory at 0x{:x}.".format(source_address))
@@ -4106,8 +4199,6 @@ def get_rip_relative_addr(source_address):
 # XXX: instead of reading memory we can dereference right away in the evaluation
 def get_indirect_flow_target(source_address):
     err = lldb.SBError()
-    target = get_target()
-
     operand = get_operands(source_address)
     #output("Operand: {}\n".format(operand))
     # calls into a deferenced memory address
@@ -4158,29 +4249,23 @@ def get_indirect_flow_target(source_address):
     # RIP relative calls
     elif operand.startswith('0x'):
         #output("direct call\n")
-        # there's a lldb bug with calls inside modules that are not the main executable
-        # the operand output we get is wrong because the internal section address is wrong
-        # so we need to manually compute the RIP address
-        main_module = target.GetModuleAtIndex(0)
-        current_module = lldb.SBAddress(source_address, target).module
-        if current_module != main_module:
-            #output("address outside main module\n")
-            return get_rip_relative_addr(source_address)
+        # the disassembler already did the dirty work for us
+        # so we just extract the address
         x = re.search('(0x[0-9a-z]+)', operand)
         if x != None:
             #output("Result {}\n".format(x.group(0)))
             return int(x.group(1), 16)
+    return 0
 
-def get_ret_address(source_address):
+def get_ret_address():
     err = lldb.SBError()
-    target = get_target()
     stack_addr = get_current_sp()
     if stack_addr == 0:
-        return 0
+        return -1
     ret_addr = get_process().ReadPointerFromMemory(stack_addr, err)
     if err.Success() == False:
         print("[-] error: Failed to read memory at 0x{:x}.".format(stack_addr))
-        return 0
+        return -1
     return ret_addr
 
 def is_sending_objc_msg():
@@ -4223,11 +4308,11 @@ def display_objc():
     if len(strings) != 0:
         color(RED)
         output('Class: ')
-        color_reset()
+        color(RESET)
         output(className)
         color(RED)
         output(' Selector: ')
-        color_reset()
+        color(RESET)
         output(strings[0])
 
 def display_indirect_flow():
@@ -4236,7 +4321,7 @@ def display_indirect_flow():
     mnemonic = get_mnemonic(pc_addr)
 
     if ("ret" in mnemonic) == True:
-        indirect_addr = get_ret_address(pc_addr)
+        indirect_addr = get_ret_address()
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
         output("\n")
         return
@@ -4252,9 +4337,78 @@ def display_indirect_flow():
         output("\n")
 
     return
-#
+
+# find out the target address of ret, and indirect call and jmp
+def get_indirect_flow_address(src_addr):
+    target = get_target()
+    instruction_list = target.ReadInstructions(lldb.SBAddress(src_addr, target), 1, 'intel')
+    if instruction_list.GetSize() == 0:
+        print("[-] error: not enough instructions disassembled.")
+        return -1
+
+    cur_instruction = instruction_list.GetInstructionAtIndex(0)
+    if cur_instruction.DoesBranch() == False:
+        return -1
+
+    if "ret" in cur_instruction.mnemonic:
+        ret_addr = get_ret_address()
+        return ret_addr
+    if ("call" in cur_instruction.mnemonic) or ("jmp" in cur_instruction.mnemonic):
+        # don't care about RIP relative jumps
+        if cur_instruction.operands.startswith('0x'):
+            return -1
+        indirect_addr = get_indirect_flow_target(src_addr)
+        return indirect_addr
+    # all other branches just return -1
+    return -1
+
+# retrieve the module full path name an address belongs to
+def get_module_name(src_addr):
+    target = get_target()
+    src_module = lldb.SBAddress(src_addr, target).module
+    module_name = src_module.file.fullpath
+    if module_name == None:
+        return ""
+    else:
+        return module_name
+
+def get_objectivec_selector(src_addr):
+    err = lldb.SBError()
+    target = get_target()
+
+    call_addr = get_indirect_flow_target(src_addr)
+    if call_addr == 0:
+        return ""
+    sym_addr = lldb.SBAddress(call_addr, target)
+    symbol = sym_addr.GetSymbol()
+    # XXX: add others?
+    if symbol.name != "objc_msgSend":
+        return ""
+
+    options = lldb.SBExpressionOptions()
+    options.SetLanguage(lldb.eLanguageTypeObjC)
+    options.SetTrapExceptions(False)
+
+    classname_command = '(const char *)object_getClassName((id){})'.format(get_instance_object())
+    classname_value = get_frame().EvaluateExpression(classname_command)
+    if classname_value.IsValid() == False:
+        return ""
+    
+    className = classname_value.GetSummary().strip('"')
+    selector_addr = get_gp_register("rsi")
+    membuf = get_process().ReadMemory(selector_addr, 0x100, err)
+    strings = membuf.split('\00')
+    if len(strings) != 0:
+        return "[" + className + " " + strings[0] + "]"
+    else:
+        return "[" + className + "]"
+    
+    return ""
+
+# ------------------------------------------------------------
 # The heart of lldbinit - when lldb stop this is where we land 
-#
+# ------------------------------------------------------------
+
 def HandleHookStopOnTarget(debugger, command, result, dict):
     '''Display current code context.'''
     # Don't display anything if we're inside Xcode
@@ -4262,7 +4416,6 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         return
     
     global GlobalListOutput
-    global arm_type
     global CONFIG_DISPLAY_STACK_WINDOW
     global CONFIG_DISPLAY_FLOW_WINDOW
 
@@ -4303,9 +4456,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     elif is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------")
             
-    color_bold()
+    color(BOLD)
     output("[regs]\n")
-    color_reset()
+    color(RESET)
     print_registers()
 
     if CONFIG_DISPLAY_STACK_WINDOW == 1:
@@ -4314,22 +4467,21 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             output("--------------------------------------------------------------------------------")
         elif is_x64():
             output("----------------------------------------------------------------------------------------------------------------------")
-        color_bold()
+        color(BOLD)
         output("[stack]\n")
-        color_reset()
-    
+        color(RESET)
         display_stack()
         output("\n")
+
     if CONFIG_DISPLAY_DATA_WINDOW == 1:
         color(COLOR_SEPARATOR)
         if is_i386() or is_arm():
             output("---------------------------------------------------------------------------------")
         elif is_x64():
             output("-----------------------------------------------------------------------------------------------------------------------")
-        color_bold()
+        color(BOLD)
         output("[data]\n")
-        color_reset()
-    
+        color(RESET)
         display_data()
         output("\n")
 
@@ -4339,91 +4491,33 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             output("---------------------------------------------------------------------------------")
         elif is_x64():
             output("-----------------------------------------------------------------------------------------------------------------------")
-        color_bold()
+        color(BOLD)
         output("[flow]\n")
-        color_reset()
-
+        color(RESET)
         display_indirect_flow()
-
 
     color(COLOR_SEPARATOR)
     if is_i386() or is_arm():
         output("---------------------------------------------------------------------------------")
     elif is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------")
-    color_bold()
+    color(BOLD)
     output("[code]\n")
-    color_reset()
-    
-    if is_i386():
-        pc = get_register("eip")
-    elif is_x64():
-        pc = get_register("rip")
-    elif is_arm():
-        pc = get_register("pc")        
-    
-    res = lldb.SBCommandReturnObject()
-    if is_arm():
-        cpsr = get_gp_register("cpsr")
-        t = (cpsr >> 5) & 1
-        if t:
-            #it's thumb
-            arm_type = "thumbv7-apple-ios"
-        else:
-            arm_type = "armv7-apple-ios"
-        lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -A " + arm_type + " --start-address=" + pc + " --count=8", res)
-    else:
-        if CONFIG_DISPLAY_DISASSEMBLY_BYTES == 1:
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble -b --start-address=" + pc + " --count=" + str(CONFIG_DISASSEMBLY_LINE_COUNT), res)
-        else:
-            lldb.debugger.GetCommandInterpreter().HandleCommand("disassemble --start-address=" + pc + " --count=" + str(CONFIG_DISASSEMBLY_LINE_COUNT), res)
-    
-    data = res.GetOutput()
-    #split lines... and mark currently executed code...
-    data = data.split("\n")
-    #detemine what to hl, as sometimes lldb won't put => into stoped thread... well...
-    #need to check if first sym is => or '  ' which means this is name without symol
-    #symbols are stored 1st so here we go...
-    
-    line_to_hl = 0
-    #if data[0][0:2] == "->":
-    #   line_to_hl = 0;
-    #if data[0][0:2] != '  ':
-    #   line_to_hl = 1;
-    
-    #now we look when pc is held in disassembly and we color only that line 
-    pc_text = int(str(pc).strip().split()[0], 16)
-    pc_text = hex(pc_text)
-    #print(pc_text);
-    for idx,x in enumerate(data):
-        if pc_text in x:
-            line_to_hl = idx
-            break
-    for idx,x in enumerate(data):
-        if line_to_hl == idx: #x[0:2] == "->" and idx < 3:
-            color(COLOR_HIGHLIGHT_LINE)
-            color_bold()
-            output(x)
-            color_reset()
-            output("\n")
-        # don't add newline to last line to avoid empty line
-        elif len(data) > 0 and idx == len(data)-1:
-            output(x)
-        else:
-            output(x)
-            output("\n")
+    color(RESET)
+            
+    # disassemble and add its contents to output inside
+    disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
         
-    #output(res.GetOutput());
     color(COLOR_SEPARATOR)
     if get_pointer_size() == 4: #is_i386() or is_arm():
         output("---------------------------------------------------------------------------------------")
     elif get_pointer_size() == 8: #is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------------")
-    color_reset()
-    #output("\n");
+    color(RESET)
     
+    # XXX: do we really need to output all data into the array and then print it in a single go? faster to just print directly?
+    # was it done this way because previously disassembly was capturing the output and modifying it?
     data = "".join(GlobalListOutput)
-    
     result.PutCString(data)
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
     return 0
