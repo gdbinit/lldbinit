@@ -26,12 +26,13 @@ To list all implemented commands use 'lldbinitcmds' command.
 How to install it:
 ------------------
 
-$ cp lldbinit.py /Library/Python/2.7/site-packages
-$ echo "command script import lldbinit" >> $HOME/.lldbinit
-
-or
 $ cp lldbinit.py ~
 $ echo "command script import  ~/lldbinit.py" >>$HOME/.lldbinit
+
+or
+
+$ cp lldbinit.py /Library/Python/2.7/site-packages
+$ echo "command script import lldbinit" >> $HOME/.lldbinit
 
 or
 
@@ -155,59 +156,15 @@ COLOR_ARRAY = [ BLACK_COLOR, RED_COLOR, GREEN_COLOR, YELLOW_COLOR, BLUE_COLOR, M
 
 DATA_WINDOW_ADDRESS = 0
 
-old_eax = 0
-old_ecx = 0
-old_edx = 0
-old_ebx = 0
-old_esp = 0
-old_ebp = 0
-old_esi = 0
-old_edi = 0
-old_eip = 0
-old_eflags = 0
-old_cs  = 0
-old_ds  = 0
-old_fs  = 0
-old_gs  = 0
-old_ss  = 0
-old_es  = 0
+old_x86 = { "eax": 0, "ecx": 0, "edx": 0, "ebx": 0, "esp": 0, "ebp": 0, "esi": 0, "edi": 0, "eip": 0, "eflags": 0,
+        "cs": 0, "ds": 0, "fs": 0, "gs": 0, "ss": 0, "es": 0, }
 
-old_rax = 0
-old_rcx = 0
-old_rdx = 0
-old_rbx = 0
-old_rsp = 0
-old_rbp = 0
-old_rsi = 0
-old_rdi = 0
-old_r8  = 0
-old_r9  = 0
-old_r10 = 0
-old_r11 = 0
-old_r12 = 0
-old_r13 = 0
-old_r14 = 0
-old_r15 = 0
-old_rflags = 0
-old_rip = 0
+old_x64 = { "rax": 0, "rcx": 0, "rdx": 0, "rbx": 0, "rsp": 0, "rbp": 0, "rsi": 0, "rdi": 0, "rip": 0, "rflags": 0,
+        "cs": 0, "fs": 0, "gs": 0, "r8": 0, "r9": 0, "r10": 0, "r11": 0, "r12": 0, 
+        "r13": 0, "r14": 0, "r15": 0 }
 
-old_arm_r0  = 0
-old_arm_r1  = 0
-old_arm_r2  = 0
-old_arm_r3  = 0
-old_arm_r4  = 0
-old_arm_r5  = 0
-old_arm_r6  = 0
-old_arm_r7  = 0
-old_arm_r8  = 0
-old_arm_r9  = 0
-old_arm_r10 = 0
-old_arm_r11 = 0
-old_arm_r12 = 0
-old_arm_sp  = 0
-old_arm_lr  = 0
-old_arm_pc  = 0
-old_arm_cpsr = 0
+old_arm = { "r0": 0, "r1": 0, "r2": 0, "r3": 0, "r4": 0, "r5": 0, "r6": 0, "r7": 0, "r8": 0, "r9": 0, "r10": 0, 
+            "r11": 0, "r12": 0, "sp": 0, "lr": 0, "pc": 0, "cpsr": 0 }
 
 arm_type = "thumbv7-apple-ios"
 
@@ -2247,8 +2204,20 @@ def get_gp_register(reg_name):
         return 0
     for reg in regs:
         if reg_name == reg.GetName():
-            return int(reg.GetValue(), 16)
+            #return int(reg.GetValue(), 16)
+            return reg.unsigned
     return 0
+
+def get_gp_registers():
+    regs = get_registers("general purpose")
+    if regs == None:
+        return 0
+    
+    registers = {}
+    for reg in regs:
+        reg_name = reg.GetName()
+        registers[reg_name] = reg.unsigned
+    return registers
         
 def get_register(reg_name):
     regs = get_registers("general purpose")
@@ -2407,7 +2376,7 @@ def cmd_ecx(debugger, command, result, dict):
 # modify eflags/rflags commands
 # -----------------------------
 
-def modify_eflags(register):
+def modify_eflags(flag):
     # read the current value so we can modify it
     if is_x64():
         eflags = get_gp_register("rflags")
@@ -2417,51 +2386,15 @@ def modify_eflags(register):
         print("[-] error: unsupported architecture.")
         return
 
-    if register == "a":
-        if (eflags >> 4) & 1:
-            eflags = eflags & ~0x10
-        else:
-            eflags = eflags | 0x10
-    elif register == "c":
-        if (eflags & 1):
-            eflags = eflags & ~0x1
-        else:
-            eflags = eflags | 0x1
-    elif register == "d":
-        if (eflags >> 0xA) & 1:
-            eflags = eflags & ~0x400
-        else:
-            eflags = eflags | 0x400
-    elif register == "i":
-        if (eflags >> 0x9) & 1:
-            eflags = eflags & ~0x200
-        else:
-            eflags = eflags | 0x200
-    elif register == "o":
-        if (eflags >> 0xB) & 1:
-            eflags = eflags & ~0x800
-        else:
-            eflags = eflags | 0x800
-    elif register == "p":
-        if (eflags >> 0x2) & 1:
-            eflags = eflags & ~0x4
-        else:
-            eflags = eflags | 0x4
-    elif register == "s":
-        if (eflags >> 0x7) & 1:
-            eflags = eflags & ~0x80
-        else:
-            eflags = eflags | 0x80
-    elif register == "t":
-        if (eflags >> 0x8) & 1:
-            eflags = eflags & ~0x100
-        else:
-            eflags = eflags | 0x100
-    elif register == "z":
-        if (eflags >> 6) & 1:
-            eflags = eflags & ~0x40
-        else:
-            eflags = eflags | 0x40
+    masks = { "CF":0, "PF":2, "AF":4, "ZF":6, "SF":7, "TF":8, "IF":9, "DF":10, "OF":11 }
+    if flag not in masks.keys():
+        print("[-] error: requested flag not available")
+        return
+    # we invert whatever value is set
+    if bool(eflags & (1 << masks[flag])) == True:
+        eflags = eflags & ~(1 << masks[flag])
+    else:
+        eflags = eflags | (1 << masks[flag])
 
     # finally update the value
     if is_x64():
@@ -2476,7 +2409,6 @@ Flip current adjust flag.
 
 Syntax: cfa
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2486,8 +2418,7 @@ Syntax: cfa
         print("")
         print(help)
         return
-    
-    modify_eflags("a")
+    modify_eflags("AF")
 
 def cmd_cfc(debugger, command, result, dict):
     '''Change carry flag. Use \'cfc help\' for more information.'''
@@ -2496,7 +2427,6 @@ Flip current carry flag.
 
 Syntax: cfc
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2506,8 +2436,7 @@ Syntax: cfc
         print("")
         print(help)
         return
-
-    modify_eflags("c")
+    modify_eflags("CF")
 
 def cmd_cfd(debugger, command, result, dict):
     '''Change direction flag. Use \'cfd help\' for more information.'''
@@ -2516,7 +2445,6 @@ Flip current direction flag.
 
 Syntax: cfd
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2526,8 +2454,7 @@ Syntax: cfd
         print("")
         print(help)
         return
-    
-    modify_eflags("d")
+    modify_eflags("DF")
 
 def cmd_cfi(debugger, command, result, dict):
     '''Change interrupt flag. Use \'cfi help\' for more information.'''
@@ -2536,7 +2463,6 @@ Flip current interrupt flag.
 
 Syntax: cfi
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2546,8 +2472,7 @@ Syntax: cfi
         print("")
         print(help)
         return
-
-    modify_eflags("i")
+    modify_eflags("IF")
 
 def cmd_cfo(debugger, command, result, dict):
     '''Change overflow flag. Use \'cfo help\' for more information.'''
@@ -2556,7 +2481,6 @@ Flip current overflow flag.
 
 Syntax: cfo
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2566,8 +2490,7 @@ Syntax: cfo
         print("")
         print(help)
         return
-
-    modify_eflags("o")
+    modify_eflags("OF")
 
 def cmd_cfp(debugger, command, result, dict):
     '''Change parity flag. Use \'cfp help\' for more information.'''
@@ -2576,7 +2499,6 @@ Flip current parity flag.
 
 Syntax: cfp
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2586,8 +2508,7 @@ Syntax: cfp
         print("")
         print(help)
         return
-
-    modify_eflags("p")
+    modify_eflags("PF")
 
 def cmd_cfs(debugger, command, result, dict):
     '''Change sign flag. Use \'cfs help\' for more information.'''
@@ -2596,7 +2517,6 @@ Flip current sign flag.
 
 Syntax: cfs
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2606,8 +2526,7 @@ Syntax: cfs
         print("")
         print(help)
         return
-
-    modify_eflags("s")
+    modify_eflags("SF")
 
 def cmd_cft(debugger, command, result, dict):
     '''Change trap flag. Use \'cft help\' for more information.'''
@@ -2616,7 +2535,6 @@ Flip current trap flag.
 
 Syntax: cft
 """
-    
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2626,8 +2544,7 @@ Syntax: cft
         print("")
         print(help)
         return
-
-    modify_eflags("t")
+    modify_eflags("TF")
 
 def cmd_cfz(debugger, command, result, dict):
     '''Change zero flag. Use \'cfz help\' for more information.'''
@@ -2635,8 +2552,7 @@ def cmd_cfz(debugger, command, result, dict):
 Flip current zero flag.
 
 Syntax: cfz
-"""
-    
+""" 
     cmd = command.split()
     if len(cmd) != 0:
         if cmd[0] == "help":
@@ -2646,93 +2562,26 @@ Syntax: cfz
         print("")
         print(help)
         return
-
-    modify_eflags("z")
+    modify_eflags("ZF")
 
 def dump_eflags(eflags):
-    if (eflags >> 0xB) & 1:
-        output("O ")
-    else:
-        output("o ")
-    
-    if (eflags >> 0xA) & 1:
-        output("D ")
-    else:
-        output("d ")
-
-    if (eflags >> 9) & 1:
-        output("I ")
-    else:
-        output("i ")
-
-    if (eflags >> 8) & 1:
-        output("T ")
-    else:
-        output("t ")
-    
-    if (eflags >> 7) & 1:
-        output("S ")
-    else:
-        output("s ")
-    
-    if (eflags >> 6) & 1:
-        output("Z ")
-    else:
-        output("z ")
-    
-    if (eflags >> 4) & 1:
-        output("A ")
-    else:
-        output("a ")
-
-    if (eflags >> 2) & 1:
-        output("P ")
-    else:
-        output("p ")        
-
-    if eflags & 1:
-        output("C")
-    else:
-        output("c")
+    # the registers are printed by inverse order of bit field
+    # no idea where this comes from :-]
+    # masks = { "CF":0, "PF":2, "AF":4, "ZF":6, "SF":7, "TF":8, "IF":9, "DF":10, "OF":11 }
+    # printTuples = sorted(masks.items() , reverse=True, key=lambda x: x[1])
+    eflagsTuples = [('OF', 11), ('DF', 10), ('IF', 9), ('TF', 8), ('SF', 7), ('ZF', 6), ('AF', 4), ('PF', 2), ('CF', 0)]
+    # use the first character of each register key to output, lowercase if bit not set
+    for flag, bitfield in eflagsTuples :
+        if bool(eflags & (1 << bitfield)) == True:
+            output(flag[0] + " ")
+        else:
+            output(flag[0].lower() + " ")
 
 # function to dump the conditional jumps results
 def dump_jumpx86(eflags):
-    o_flag = 0
-    d_flag = 0
-    i_flag = 0
-    t_flag = 0
-    s_flag = 0
-    z_flag = 0
-    a_flag = 0
-    p_flag = 0
-    c_flag = 0
-
-    if (eflags >> 0xB) & 1:
-        o_flag = 1
-    
-    if (eflags >> 0xA) & 1:
-        d_flag = 1
-
-    if (eflags >> 9) & 1:
-        i_flag = 1
-
-    if (eflags >> 8) & 1:
-        t_flag = 1
-    
-    if (eflags >> 7) & 1:
-        s_flag = 1
-    
-    if (eflags >> 6) & 1:
-        z_flag = 1
-    
-    if (eflags >> 4) & 1:
-        a_flag = 1
-
-    if (eflags >> 2) & 1:
-        p_flag = 1
-
-    if eflags & 1:
-        c_flag = 1
+    # masks and flags from https://github.com/ant4g0nist/lisa.py
+    masks = { "CF":0, "PF":2, "AF":4, "ZF":6, "SF":7, "TF":8, "IF":9, "DF":10, "OF":11 }
+    flags = { key: bool(eflags & (1 << value)) for key, value in masks.items() }
 
     error = lldb.SBError()
     target = get_target()
@@ -2745,34 +2594,33 @@ def dump_jumpx86(eflags):
         return
 
     mnemonic = get_mnemonic(pc_addr)
-
     color(RED)
     output_string=""
     ## opcode 0x77: JA, JNBE (jump if CF=0 and ZF=0)
     ## opcode 0x0F87: JNBE, JA
     if "ja" == mnemonic or "jnbe" == mnemonic:
-        if c_flag == 0 and z_flag == 0:
+        if flags["CF"] == False and flags["ZF"] == False:
             output_string="Jump is taken (c = 0 and z = 0)"
         else:
             output_string="Jump is NOT taken (c = 0 and z = 0)"
     ## opcode 0x73: JAE, JNB, JNC (jump if CF=0)
     ## opcode 0x0F83: JNC, JNB, JAE (jump if CF=0)
     if "jae" == mnemonic or "jnb" == mnemonic or "jnc" == mnemonic:
-        if c_flag == 0:
+        if flags["CF"] == False:
             output_string="Jump is taken (c = 0)"
         else:
             output_string="Jump is NOT taken (c != 0)"
     ## opcode 0x72: JB, JC, JNAE (jump if CF=1)
     ## opcode 0x0F82: JNAE, JB, JC
     if "jb" == mnemonic or "jc" == mnemonic or "jnae" == mnemonic:
-        if c_flag == 1:
+        if flags["CF"] == True:
             output_string="Jump is taken (c = 1)"
         else:
             output_string="Jump is NOT taken (c != 1)"
     ## opcode 0x76: JBE, JNA (jump if CF=1 or ZF=1)
     ## opcode 0x0F86: JBE, JNA
     if "jbe" == mnemonic or "jna" == mnemonic:
-        if c_flag == 1 or z_flag == 1:
+        if flags["CF"] == True or flags["ZF"] == 1:
             output_string="Jump is taken (c = 1 or z = 1)"
         else:
             output_string="Jump is NOT taken (c != 1 or z != 1)"
@@ -2789,84 +2637,84 @@ def dump_jumpx86(eflags):
     ## opcode 0x74: JE, JZ (jump if ZF=1)
     ## opcode 0x0F84: JZ, JE, JZ (jump if ZF=1)
     if "je" == mnemonic or "jz" == mnemonic:
-        if z_flag == 1:
+        if flags["ZF"] == 1:
             output_string="Jump is taken (z = 1)"
         else:
             output_string="Jump is NOT taken (z != 1)"
     ## opcode 0x7F: JG, JNLE (jump if ZF=0 and SF=OF)
     ## opcode 0x0F8F: JNLE, JG (jump if ZF=0 and SF=OF)
     if "jg" == mnemonic or "jnle" == mnemonic:
-        if z_flag == 0 and s_flag == o_flag:
+        if flags["ZF"] == 0 and flags["SF"] == flags["OF"]:
             output_string="Jump is taken (z = 0 and s = o)"
         else:
             output_string="Jump is NOT taken (z != 0 or s != o)"
     ## opcode 0x7D: JGE, JNL (jump if SF=OF)
     ## opcode 0x0F8D: JNL, JGE (jump if SF=OF)
     if "jge" == mnemonic or "jnl" == mnemonic:
-        if s_flag == o_flag:
+        if flags["SF"] == flags["OF"]:
             output_string="Jump is taken (s = o)"
         else:
             output_string="Jump is NOT taken (s != o)"
     ## opcode: 0x7C: JL, JNGE (jump if SF != OF)
     ## opcode: 0x0F8C: JNGE, JL (jump if SF != OF)
     if "jl" == mnemonic or "jnge" == mnemonic:
-        if s_flag != o_flag:
+        if flags["SF"] != flags["OF"]:
             output_string="Jump is taken (s != o)"
         else:
             output_string="Jump is NOT taken (s = o)"
     ## opcode 0x7E: JLE, JNG (jump if ZF = 1 or SF != OF)
     ## opcode 0x0F8E: JNG, JLE (jump if ZF = 1 or SF != OF)
     if "jle" == mnemonic or "jng" == mnemonic:
-        if z_flag == 1 or s_flag != o_flag:
+        if flags["ZF"] == 1 or flags["SF"] != flags["OF"]:
             output_string="Jump is taken (z = 1 or s != o)"
         else:
             output_string="Jump is NOT taken (z != 1 or s = o)"
     ## opcode 0x75: JNE, JNZ (jump if ZF = 0)
     ## opcode 0x0F85: JNE, JNZ (jump if ZF = 0)
     if "jne" == mnemonic or "jnz" == mnemonic:
-        if z_flag == 0:
+        if flags["ZF"] == 0:
             output_string="Jump is taken (z = 0)"
         else:
             output_string="Jump is NOT taken (z != 0)"
     ## opcode 0x71: JNO (OF = 0)
     ## opcode 0x0F81: JNO (OF = 0)
     if "jno" == mnemonic:
-        if o_flag == 0:
+        if flags["OF"] == 0:
             output_string="Jump is taken (o = 0)"
         else:
             output_string="Jump is NOT taken (o != 0)"
     ## opcode 0x7B: JNP, JPO (jump if PF = 0)
     ## opcode 0x0F8B: JPO (jump if PF = 0)
     if "jnp" == mnemonic or "jpo" == mnemonic:
-        if p_flag == 0:
+        if flags["PF"] == 0:
             output_string="Jump is NOT taken (p = 0)"
         else:
             output_string="Jump is taken (p != 0)"
     ## opcode 0x79: JNS (jump if SF = 0)
     ## opcode 0x0F89: JNS (jump if SF = 0)
     if "jns" == mnemonic:
-        if s_flag == 0:
+        if flags["SF"] == 0:
             output_string="Jump is taken (s = 0)"
         else:
             output_string="Jump is NOT taken (s != 0)"
     ## opcode 0x70: JO (jump if OF=1)
     ## opcode 0x0F80: JO (jump if OF=1)
     if "jo" == mnemonic:
-        if o_flag == 1:
+        if flags["OF"] == 1:
             output_string="Jump is taken (o = 1)"
         else:
             output_string="Jump is NOT taken (o != 1)"
     ## opcode 0x7A: JP, JPE (jump if PF=1)
     ## opcode 0x0F8A: JP, JPE (jump if PF=1)
     if "jp" == mnemonic or "jpe" == mnemonic:
-        if p_flag == 1:
+        if flags["PF"] == 1:
             output_string="Jump is taken (p = 1)"
         else:
             output_string="Jump is NOT taken (p != 1)"
     ## opcode 0x78: JS (jump if SF=1)
     ## opcode 0x0F88: JS (jump if SF=1)
     if "js" == mnemonic:
-        if s_flag == 1:
+        if flags["SF"] == 1:
             output_string="Jump is taken (s = 1)"
         else:
             output_string="Jump is NOT taken (s != 1)"
@@ -2881,88 +2729,64 @@ def dump_jumpx86(eflags):
     color(RESET)
 
 def reg64():
-    global old_cs
-    global old_ds
-    global old_fs
-    global old_gs
-    global old_ss
-    global old_es
-    global old_rax
-    global old_rcx
-    global old_rdx
-    global old_rbx
-    global old_rsp
-    global old_rbp
-    global old_rsi
-    global old_rdi
-    global old_r8 
-    global old_r9 
-    global old_r10
-    global old_r11
-    global old_r12
-    global old_r13
-    global old_r14
-    global old_r15
-    global old_rflags
-    global old_rip
-
-    rax = get_gp_register("rax")
-    rcx = get_gp_register("rcx")
-    rdx = get_gp_register("rdx")
-    rbx = get_gp_register("rbx")
-    rsp = get_gp_register("rsp")
-    rbp = get_gp_register("rbp")
-    rsi = get_gp_register("rsi")
-    rdi = get_gp_register("rdi")
-    r8  = get_gp_register("r8")
-    r9  = get_gp_register("r9")
-    r10 = get_gp_register("r10")
-    r11 = get_gp_register("r11")
-    r12 = get_gp_register("r12")
-    r13 = get_gp_register("r13")
-    r14 = get_gp_register("r14")
-    r15 = get_gp_register("r15")
-    rip = get_gp_register("rip")
-    rflags = get_gp_register("rflags")
-    cs = get_gp_register("cs")
-    gs = get_gp_register("gs")
-    fs = get_gp_register("fs")
+    registers = get_gp_registers()
+    rax = registers["rax"]
+    rcx = registers["rcx"]
+    rdx = registers["rdx"]
+    rbx = registers["rbx"]
+    rsp = registers["rsp"]
+    rbp = registers["rbp"]
+    rsi = registers["rsi"]
+    rdi = registers["rdi"]
+    r8  = registers["r8"]
+    r9  = registers["r9"]
+    r10 = registers["r10"]
+    r11 = registers["r11"]
+    r12 = registers["r12"]
+    r13 = registers["r13"]
+    r14 = registers["r14"]
+    r15 = registers["r15"]
+    rip = registers["rip"]
+    rflags = registers["rflags"]
+    cs = registers["cs"]
+    gs = registers["gs"]
+    fs = registers["fs"]
 
     color(COLOR_REGNAME)
     output("  RAX: ")
-    if rax == old_rax:
+    if rax == old_x64["rax"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rax))
-    old_rax = rax
+    old_x64["rax"] = rax
     
     color(COLOR_REGNAME)
     output("  RBX: ")
-    if rbx == old_rbx:
+    if rbx == old_x64["rbx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rbx))
-    old_rbx = rbx
+    old_x64["rbx"] = rbx
     
     color(COLOR_REGNAME)
     output("  RBP: ")
-    if rbp == old_rbp:
+    if rbp == old_x64["rbp"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rbp))
-    old_rbp = rbp
+    old_x64["rbp"] = rbp
     
     color(COLOR_REGNAME)
     output("  RSP: ")
-    if rsp == old_rsp:
+    if rsp == old_x64["rsp"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rsp))
-    old_rsp = rsp
+    old_x64["rsp"] = rsp
     
     output("  ")
     color(BOLD)
@@ -2975,215 +2799,210 @@ def reg64():
             
     color(COLOR_REGNAME)
     output("  RDI: ")
-    if rdi == old_rdi:
+    if rdi == old_x64["rdi"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rdi))
-    old_rdi = rdi
+    old_x64["rdi"] = rdi
     
     color(COLOR_REGNAME)
     output("  RSI: ")
-    if rsi == old_rsi:
+    if rsi == old_x64["rsi"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rsi))
-    old_rsi = rsi
+    old_x64["rsi"] = rsi
     
     color(COLOR_REGNAME)
     output("  RDX: ")
-    if rdx == old_rdx:
+    if rdx == old_x64["rdx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rdx))
-    old_rdx = rdx
+    old_x64["rdx"] = rdx
     
     color(COLOR_REGNAME)
     output("  RCX: ")
-    if rcx == old_rcx:
+    if rcx == old_x64["rcx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rcx))
-    old_rcx = rcx
+    old_x64["rcx"] = rcx
     
     color(COLOR_REGNAME)
     output("  RIP: ")
-    if rip == old_rip:
+    if rip == old_x64["rip"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (rip))
-    old_rip = rip
+    old_x64["rip"] = rip
     output("\n")
         
     color(COLOR_REGNAME)
     output("  R8:  ")
-    if r8 == old_r8:
+    if r8 == old_x64["r8"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r8))
-    old_r8 = r8
+    old_x64["r8"] = r8
     
     color(COLOR_REGNAME)
     output("  R9:  ")
-    if r9 == old_r9:
+    if r9 == old_x64["r9"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r9))
-    old_r9 = r9
+    old_x64["r9"] = r9
     
     color(COLOR_REGNAME)
     output("  R10: ")
-    if r10 == old_r10:
+    if r10 == old_x64["r10"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r10))
-    old_r10 = r10
+    old_x64["r10"] = r10
     
     color(COLOR_REGNAME)
     output("  R11: ")
-    if r11 == old_r11:
+    if r11 == old_x64["r11"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r11))
-    old_r11 = r11
+    old_x64["r11"] = r11
     
     color(COLOR_REGNAME)
     output("  R12: ")
-    if r12 == old_r12:
+    if r12 == old_x64["r12"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r12))
-    old_r12 = r12
+    old_x64["r12"] = r12
     
     output("\n")
         
     color(COLOR_REGNAME)
     output("  R13: ")
-    if r13 == old_r13:
+    if r13 == old_x64["r13"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r13))
-    old_r13 = r13
+    old_x64["r13"] = r13
     
     color(COLOR_REGNAME)
     output("  R14: ")
-    if r14 == old_r14:
+    if r14 == old_x64["r14"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r14))
-    old_r14 = r14
+    old_x64["r14"] = r14
     
     color(COLOR_REGNAME)
     output("  R15: ")
-    if r15 == old_r15:
+    if r15 == old_x64["r15"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.016lX" % (r15))
-    old_r15 = r15
+    old_x64["r15"] = r15
     output("\n")
         
     color(COLOR_REGNAME)
     output("  CS:  ")
-    if cs == old_cs:
+    if cs == old_x64["cs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (cs))
-    old_cs = cs
+    old_x64["cs"] = cs
         
     color(COLOR_REGNAME)
     output("  FS: ")
-    if fs == old_fs:
+    if fs == old_x64["fs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (fs))
-    old_fs = fs
+    old_x64["fs"] = fs
     
     color(COLOR_REGNAME)
     output("  GS: ")
-    if gs == old_gs:
+    if gs == old_x64["gs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (gs))
-    old_gs = gs
+    old_x64["gs"] = gs
     
     dump_jumpx86(rflags)
     output("\n")
 
 def reg32():
-    global old_eax
-    global old_ecx
-    global old_edx
-    global old_ebx
-    global old_esp
-    global old_ebp
-    global old_esi
-    global old_edi
-    global old_eflags
-    global old_cs
-    global old_ds
-    global old_fs
-    global old_gs
-    global old_ss
-    global old_es
-    global old_eip
+    registers = get_gp_registers()
+    eax = registers["eax"]
+    ecx = registers["ecx"]
+    edx = registers["edx"]
+    ebx = registers["ebx"]
+    esp = registers["esp"]
+    ebp = registers["ebp"]
+    esi = registers["esi"]
+    edi = registers["edi"]
+    eflags = registers["eflags"]
+    cs = registers["cs"]
+    ds = registers["ds"]
+    es = registers["es"]
+    gs = registers["gs"]
+    fs = registers["fs"]
+    ss = registers["ss"]
         
     color(COLOR_REGNAME)
     output("  EAX: ")
-    eax = get_gp_register("eax")
-    if eax == old_eax:
+    if eax == old_x86["eax"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (eax))
-    old_eax = eax
+    old_x86["eax"] = eax
     
     color(COLOR_REGNAME)
     output("  EBX: ")
-    ebx = get_gp_register("ebx")
-    if ebx == old_ebx:
+    if ebx == old_x86["ebx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (ebx))
-    old_ebx = ebx
+    old_x86["ebx"] = ebx
     
     color(COLOR_REGNAME)
     output("  ECX: ")
-    ecx = get_gp_register("ecx")
-    if ecx == old_ecx:
+    if ecx == old_x86["ecx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (ecx))
-    old_ecx = ecx
+    old_x86["ecx"] = ecx
 
     color(COLOR_REGNAME)
     output("  EDX: ")
-    edx = get_gp_register("edx")
-    if edx == old_edx:
+    if edx == old_x86["edx"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (edx))
-    old_edx = edx
+    old_x86["edx"] = edx
     
     output("  ")
-    eflags = get_gp_register("eflags")
     color(BOLD)
     color(UNDERLINE)
     color(COLOR_CPUFLAGS)
@@ -3194,228 +3013,158 @@ def reg32():
     
     color(COLOR_REGNAME)
     output("  ESI: ")
-    esi = get_gp_register("esi")
-    if esi == old_esi:
+    if esi == old_x86["esi"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (esi))
-    old_esi = esi
+    old_x86["esi"] = esi
     
     color(COLOR_REGNAME)
     output("  EDI: ")
-    edi = get_gp_register("edi")
-    if edi == old_edi:
+    if edi == old_x86["edi"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (edi))
-    old_edi = edi
+    old_x86["edi"] = edi
     
     color(COLOR_REGNAME)
     output("  EBP: ")
-    ebp = get_gp_register("ebp")
-    if ebp == old_ebp:
+    if ebp == old_x86["ebp"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (ebp))
-    old_ebp = ebp
+    old_x86["ebp"] = ebp
     
     color(COLOR_REGNAME)
     output("  ESP: ")
-    esp = get_gp_register("esp")
-    if esp == old_esp:
+    if esp == old_x86["esp"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (esp))
-    old_esp = esp
+    old_x86["esp"] = esp
     
     color(COLOR_REGNAME)
     output("  EIP: ")
-    eip = get_gp_register("eip")
-    if eip == old_eip:
+    if eip == old_x86["eip"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (eip))
-    old_eip = eip
+    old_x86["eip"] = eip
     output("\n")
     
     color(COLOR_REGNAME)
     output("  CS:  ")
-    cs = get_gp_register("cs")
-    if cs == old_cs:
+    if cs == old_x86["cs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (cs))
-    old_cs = cs
+    old_x86["cs"] = cs
     
     color(COLOR_REGNAME)
     output("  DS: ")
-    ds = get_gp_register("ds")
-    if ds == old_ds:
+    if ds == old_x86["ds"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (ds))
-    old_ds = ds
+    old_x86["ds"] = ds
     
     color(COLOR_REGNAME)
     output("  ES: ")
-    es = get_gp_register("es")
-    if es == old_es:
+    if es == old_x86["es"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (es))
-    old_es = es
+    old_x86["es"] = es
     
     color(COLOR_REGNAME)
     output("  FS: ")
-    fs = get_gp_register("fs")
-    if fs == old_fs:
+    if fs == old_x86["fs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (fs))
-    old_fs = fs
+    old_x86["fs"] = fs
     
     color(COLOR_REGNAME)
     output("  GS: ")
-    gs = get_gp_register("gs")
-    if gs == old_gs:
+    if gs == old_x86["gs"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (gs))
-    old_gs = gs
+    old_x86["gs"] = gs
     
     color(COLOR_REGNAME)
     output("  SS: ")
-    ss = get_gp_register("ss")
-    if ss == old_ss:
+    if ss == old_x86["ss"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("%.04X" % (ss))
-    old_ss = ss
+    old_x86["ss"] = ss
 
     dump_jumpx86(eflags)
     output("\n")
     
 def dump_cpsr(cpsr):
-    if (cpsr >> 31) & 1:
-        output("N ")
-    else:
-        output("n ")
-
-    if (cpsr >> 30) & 1:
-        output("Z ")
-    else:
-        output("z ")
-
-    if (cpsr >> 29) & 1:
-        output("C ")
-    else:
-        output("c ")
-    
-    if (cpsr >> 28) & 1:
-        output("V ")
-    else:
-        output("v ")
-    
-    if (cpsr >> 27) & 1:
-        output("Q ")
-    else:
-        output("q ")
-    
-    if (cpsr >> 24) & 1:
-        output("J ")
-    else:
-        output("j ")
-    
-    if (cpsr >> 9) & 1:
-        output("E ")
-    else:
-        output("e ")
-    if (cpsr >> 8) & 1:
-        output("A ")
-    else:
-        output("a ")
-    if (cpsr >> 7) & 1:
-        output("I ")
-    else:
-        output("i ")
-    if (cpsr >> 6) & 1:
-        output("F ")
-    else:
-        output("f ")
-    if (cpsr >> 5) & 1:
-        output("T")
-    else:
-        output("t")
+    # XXX: some fields reserved in recent ARM specs so we should revise and set to latest?
+    cpsrTuples = [ ('N', 31), ('Z', 30), ('C', 29), ('V', 28), ('Q', 27), ('J', 24), 
+                   ('E', 9), ('A', 8), ('I', 7), ('F', 6), ('T', 5) ]
+    # use the first character of each register key to output, lowercase if bit not set
+    for flag, bitfield in cpsrTuples :
+        if bool(cpsr & (1 << bitfield)) == True:
+            output(flag + " ")
+        else:
+            output(flag.lower() + " ")
         
 def regarm():
-    global  old_arm_r0
-    global  old_arm_r1
-    global  old_arm_r2
-    global  old_arm_r3
-    global  old_arm_r4
-    global  old_arm_r5
-    global  old_arm_r6
-    global  old_arm_r7
-    global  old_arm_r8
-    global  old_arm_r9
-    global  old_arm_r10
-    global  old_arm_r11
-    global  old_arm_r12
-    global  old_arm_sp
-    global  old_arm_lr
-    global  old_arm_pc
-    global  old_arm_cpsr
-
     color(COLOR_REGNAME)
     output("  R0:  ")
     r0 = get_gp_register("r0")
-    if r0 == old_arm_r0:
+    if r0 == old_arm["r0"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r0))
-    old_arm_r0 = r0
+    old_arm["r0"] = r0
 
     color(COLOR_REGNAME)
     output("  R1:  ")
     r1 = get_gp_register("r1")
-    if r1 == old_arm_r1:
+    if r1 == old_arm["r1"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r1))
-    old_arm_r1 = r1
+    old_arm["r1"] = r1
 
     color(COLOR_REGNAME)
     output("  R2:  ")
     r2 = get_gp_register("r2")
-    if r2 == old_arm_r2:
+    if r2 == old_arm["r2"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r2))
-    old_arm_r2 = r2
+    old_arm["r2"] = r2
 
     color(COLOR_REGNAME)
     output("  R3:  ")
     r3 = get_gp_register("r3")
-    if r3 == old_arm_r3:
+    if r3 == old_arm["r3"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r3))
-    old_arm_r3 = r3
+    old_arm["r3"] = r3
     
     output(" ")
     color(BOLD)
@@ -3430,126 +3179,126 @@ def regarm():
     color(COLOR_REGNAME)
     output("  R4:  ")
     r4 = get_gp_register("r4")
-    if r4 == old_arm_r4:
+    if r4 == old_arm["r4"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r4))
-    old_arm_r4 = r4
+    old_arm["r4"] = r4
 
     color(COLOR_REGNAME)
     output("  R5:  ")
     r5 = get_gp_register("r5")
-    if r5 == old_arm_r5:
+    if r5 == old_arm["r5"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r5))
-    old_arm_r5 = r5
+    old_arm["r5"] = r5
 
     color(COLOR_REGNAME)
     output("  R6:  ")
     r6 = get_gp_register("r6")
-    if r6 == old_arm_r6:
+    if r6 == old_arm["r6"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r6))
-    old_arm_r6 = r6
+    old_arm["r6"] = r6
 
     color(COLOR_REGNAME)
     output("  R7:  ")
     r7 = get_gp_register("r7")
-    if r7 == old_arm_r7:
+    if r7 == old_arm["r7"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r7))
-    old_arm_r7 = r7
+    old_arm["r7"] = r7
 
     output("\n")
 
     color(COLOR_REGNAME)
     output("  R8:  ")
     r8 = get_gp_register("r8")
-    if r8 == old_arm_r8:
+    if r8 == old_arm["r8"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r8))
-    old_arm_r8 = r8
+    old_arm["r8"] = r8
 
     color(COLOR_REGNAME)
     output("  R9:  ")
     r9 = get_gp_register("r9")
-    if r9 == old_arm_r9:
+    if r9 == old_arm["r9"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r9))
-    old_arm_r9 = r9
+    old_arm["r9"] = r9
 
     color(COLOR_REGNAME)
     output("  R10: ")
     r10 = get_gp_register("r10")
-    if r10 == old_arm_r10:
+    if r10 == old_arm["r10"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r10))
-    old_arm_r10 = r10
+    old_arm["r10"] = r10
 
     color(COLOR_REGNAME)
     output("  R11: ")
     r11 = get_gp_register("r11")
-    if r11 == old_arm_r11:
+    if r11 == old_arm["r11"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r11))
-    old_arm_r11 = r11
+    old_arm["r11"] = r11
     
     output("\n")
 
     color(COLOR_REGNAME)
     output("  R12: ")
     r12 = get_gp_register("r12")
-    if r12 == old_arm_r12:
+    if r12 == old_arm["r12"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (r12))
-    old_arm_r12 = r12
+    old_arm["r12"] = r12
 
     color(COLOR_REGNAME)
     output("  SP:  ")
     sp = get_gp_register("sp")
-    if sp == old_arm_sp:
+    if sp == old_arm["sp"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (sp))
-    old_arm_sp = sp
+    old_arm["sp"] = sp
 
     color(COLOR_REGNAME)
     output("  LR:  ")
     lr = get_gp_register("lr")
-    if lr == old_arm_lr:
+    if lr == old_arm["lr"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (lr))
-    old_arm_lr = lr
+    old_arm["lr"] = lr
 
     color(COLOR_REGNAME)
     output("  PC:  ")
     pc = get_gp_register("pc")
-    if pc == old_arm_pc:
+    if pc == old_arm["pc"]:
         color(COLOR_REGVAL)
     else:
         color(COLOR_REGVAL_MODIFIED)
     output("0x%.08X" % (pc))
-    old_arm_pc = pc
+    old_arm["pc"] = pc
     output("\n")
 
 def print_registers():
