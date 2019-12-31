@@ -53,6 +53,7 @@ TODO:
 - command to update breakpoints with new ASLR
 - fix get_indirect_flow_target (we can get real load address of the modules - check the new disassembler code)
 - solve addresses like lea    rsi, [rip + 0x38cf] (lldb does solve some stuff that it has symbols for and adds the info as comment)
+- some sort of colors theme support?
 
 BUGS:
 -----
@@ -86,6 +87,8 @@ except:
     CONFIG_KEYSTONE_AVAILABLE = 0
     pass
 
+VERSION = "2.0"
+
 #
 # User configurable options
 #
@@ -113,46 +116,33 @@ CONFIG_LOG_LEVEL = "LOG_NONE"
 # reference: https://lldb.llvm.org/formats.html
 CUSTOM_DISASSEMBLY_FORMAT = "\"{${function.initial-function}{${function.name-without-args}} @ {${module.file.basename}}:\n}{${function.changed}\n{${function.name-without-args}} @ {${module.file.basename}}:\n}{${current-pc-arrow} }${addr-file-or-load}: \""
 
-# available color code
-BLACK     = 0
-RED       = 1
-GREEN     = 2
-YELLOW    = 3
-BLUE      = 4
-MAGENTA   = 5
-CYAN      = 6
-WHITE     = 7
-BOLD      = 8
-UNDERLINE = 9
-RESET     = 10
-
 # default colors - modify as you wish
-COLOR_REGVAL           = BLACK
-COLOR_REGNAME          = GREEN
-COLOR_CPUFLAGS         = RED
-COLOR_SEPARATOR        = BLUE
-COLOR_HIGHLIGHT_LINE   = RED
-COLOR_REGVAL_MODIFIED  = RED
-COLOR_SYMBOL_NAME      = BLUE
-COLOR_CURRENT_PC       = RED
+COLOR_REGVAL           = "BLACK"
+COLOR_REGNAME          = "GREEN"
+COLOR_CPUFLAGS         = "RED"
+COLOR_SEPARATOR        = "BLUE"
+COLOR_HIGHLIGHT_LINE   = "RED"
+COLOR_REGVAL_MODIFIED  = "RED"
+COLOR_SYMBOL_NAME      = "BLUE"
+COLOR_CURRENT_PC       = "RED"
 
 #
 # Don't mess after here unless you know what you are doing!
 #
 
-BLACK_COLOR   = "\033[30m"
-RED_COLOR     = "\033[31m"
-GREEN_COLOR   = "\033[32m"
-YELLOW_COLOR  = "\033[33m"
-BLUE_COLOR    = "\033[34m"
-MAGENTA_COLOR = "\033[35m"
-CYAN_COLOR    = "\033[36m"
-WHITE_COLOR   = "\033[37m"
-RESET_COLOR   = "\033[0m"
-BOLD_COLOR    = "\033[1m"
-UNDERLINE_COLOR = "\033[4m"
-
-COLOR_ARRAY = [ BLACK_COLOR, RED_COLOR, GREEN_COLOR, YELLOW_COLOR, BLUE_COLOR, MAGENTA_COLOR, CYAN_COLOR, WHITE_COLOR, BOLD_COLOR, UNDERLINE_COLOR, RESET_COLOR ]
+COLORS = {  
+            "BLACK":     "\033[30m",
+            "RED":       "\033[31m",
+            "GREEN":     "\033[32m",
+            "YELLOW":    "\033[33m",
+            "BLUE":      "\033[34m",
+            "MAGENTA":   "\033[35m",
+            "CYAN":      "\033[36m",
+            "WHITE":     "\033[37m",
+            "RESET":     "\033[0m",
+            "BOLD":      "\033[1m",
+            "UNDERLINE": "\033[4m"
+         }
 
 DATA_WINDOW_ADDRESS = 0
 
@@ -192,148 +182,153 @@ def __lldb_init_module(debugger, internal_dict):
     .lldbinit 2 times, thus this dirty hack is here to prevent doulbe loading...
     if somebody knows better way, would be great to know :)
     ''' 
-    var = lldb.debugger.GetInternalVariableValue("stop-disassembly-count", lldb.debugger.GetInstanceName())
+    var = debugger.GetInternalVariableValue("stop-disassembly-count", debugger.GetInstanceName())
     if var.IsValid():
         var = var.GetStringAtIndex(0)
         if var == "0":
             return
-    res = lldb.SBCommandReturnObject()
     
+    res = lldb.SBCommandReturnObject()
+    ci = debugger.GetCommandInterpreter()
+
     # settings
-    lldb.debugger.GetCommandInterpreter().HandleCommand("settings set target.x86-disassembly-flavor intel", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("settings set prompt \"(lldbinit) \"", res)
+    ci.HandleCommand("settings set target.x86-disassembly-flavor intel", res)
+    ci.HandleCommand("settings set prompt \"(lldbinit) \"", res)
     #lldb.debugger.GetCommandInterpreter().HandleCommand("settings set prompt \"\033[01;31m(lldb) \033[0m\"", res);
-    lldb.debugger.GetCommandInterpreter().HandleCommand("settings set stop-disassembly-count 0", res)
+    ci.HandleCommand("settings set stop-disassembly-count 0", res)
     # set the log level - must be done on startup?
-    lldb.debugger.GetCommandInterpreter().HandleCommand("settings set target.process.extra-startup-command QSetLogging:bitmask=" + CONFIG_LOG_LEVEL + ";", res)
+    ci.HandleCommand("settings set target.process.extra-startup-command QSetLogging:bitmask=" + CONFIG_LOG_LEVEL + ";", res)
     if CONFIG_USE_CUSTOM_DISASSEMBLY_FORMAT == 1:
-        lldb.debugger.GetCommandInterpreter().HandleCommand("settings set disassembly-format " + CUSTOM_DISASSEMBLY_FORMAT, res)
+        ci.HandleCommand("settings set disassembly-format " + CUSTOM_DISASSEMBLY_FORMAT, res)
 
     # the hook that makes everything possible :-)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget HandleHookStopOnTarget", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget ctx", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget context", res)
+    ci.HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget HandleHookStopOnTarget", res)
+    ci.HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget ctx", res)
+    ci.HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget context", res)
     # commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_lldbinitcmds lldbinitcmds", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_IphoneConnect iphone", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_lldbinitcmds lldbinitcmds", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_IphoneConnect iphone", res)
     #
     # dump memory commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_db db", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dw dw", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dd dd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_dq dq", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_DumpInstructions u", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_findmem findmem", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_db db", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_dw dw", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_dd dd", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_dq dq", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_DumpInstructions u", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_findmem findmem", res)
     #
     # Settings related commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_enable enable", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_disable disable", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_contextcodesize contextcodesize", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_enable enable", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_disable disable", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_contextcodesize contextcodesize", res)
     # a few settings aliases
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias enablesolib enable solib", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias disablesolib disable solib", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias enableaslr enable aslr", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias disableaslr disable aslr", res)
+    ci.HandleCommand("command alias enablesolib enable solib", res)
+    ci.HandleCommand("command alias disablesolib disable solib", res)
+    ci.HandleCommand("command alias enableaslr enable aslr", res)
+    ci.HandleCommand("command alias disableaslr disable aslr", res)
     #
     # Breakpoint related commands
     #
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bhb bhb", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bht bht", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpt bpt", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpn bpn", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bhb bhb", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bht bht", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpt bpt", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpn bpn", res)
     # disable a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpd bpd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpda bpda", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpd bpd", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpda bpda", res)
     # clear a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpc bpc", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bpca breakpoint delete", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpc bpc", res)
+    ci.HandleCommand("command alias bpca breakpoint delete", res)
     # enable a breakpoint or all
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpe bpe", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_bpea bpea", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpe bpe", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_bpea bpea", res)
     # commands to set temporary int3 patches and restore original bytes
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_int3 int3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rint3 rint3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_listint3 listint3", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_nop nop", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_null null", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_int3 int3", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_rint3 rint3", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_listint3 listint3", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_nop nop", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_null null", res)
     # change eflags commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfa cfa", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfc cfc", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfd cfd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfi cfi", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfo cfo", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfp cfp", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfs cfs", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cft cft", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_cfz cfz", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfa cfa", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfc cfc", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfd cfd", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfi cfi", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfo cfo", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfp cfp", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfs cfs", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cft cft", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_cfz cfz", res)
     # skip/step current instruction commands
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_skip skip", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_stepo stepo", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_si si", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_skip skip", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_stepo stepo", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_si si", res)
     # load breakpoints from file
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_LoadBreakPoints lb", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_LoadBreakPoints lb", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
     # cracking friends
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crack crack", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crackcmd crackcmd", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_crackcmd_noret crackcmd_noret", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_crack crack", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_crackcmd crackcmd", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_crackcmd_noret crackcmd_noret", res)
     # alias for existing breakpoint commands
     # list all breakpoints
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bpl breakpoint list", res)
+    ci.HandleCommand("command alias bpl breakpoint list", res)
     # alias "bp" command that exists in gdbinit - lldb also has alias for "b"
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bp _regexp-break", res)
+    ci.HandleCommand("command alias bp _regexp-break", res)
     # to set breakpoint commands - I hate typing too much
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias bcmd breakpoint command add", res)
+    ci.HandleCommand("command alias bcmd breakpoint command add", res)
     # launch process and stop at entrypoint (not exactly as gdb command that just inserts breakpoint)
     # usually it will be inside dyld and not the target main()
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command alias break_entrypoint process launch --stop-at-entry", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_show_loadcmds show_loadcmds", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_show_header show_header", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_tester tester", res)
-    lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_datawin datawin", res)
+    ci.HandleCommand("command alias break_entrypoint process launch --stop-at-entry", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_show_loadcmds show_loadcmds", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_show_header show_header", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_tester tester", res)
+    ci.HandleCommand("command script add -f lldbinit.cmd_datawin datawin", res)
     # shortcut command to modify registers content
     if CONFIG_ENABLE_REGISTER_SHORTCUTS == 1:
         # x64
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rip rip", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rax rax", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rbx rbx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rbp rbp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rsp rsp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rdi rdi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rsi rsi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rdx rdx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_rcx rcx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r8 r8", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r9 r9", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r10 r10", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r11 r11", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r12 r12", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r13 r13", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r14 r14", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_r15 r15", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rip rip", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rax rax", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rbx rbx", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rbp rbp", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rsp rsp", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rdi rdi", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rsi rsi", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rdx rdx", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_rcx rcx", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r8 r8", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r9 r9", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r10 r10", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r11 r11", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r12 r12", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r13 r13", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r14 r14", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_r15 r15", res)
         # x86
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_eip eip", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_eax eax", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ebx ebx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ebp ebp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_esp esp", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_edi edi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_esi esi", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_edx edx", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_ecx ecx", res)
-
+        ci.HandleCommand("command script add -f lldbinit.cmd_eip eip", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_eax eax", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_ebx ebx", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_ebp ebp", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_esp esp", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_edi edi", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_esi esi", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_edx edx", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_ecx ecx", res)
     if CONFIG_KEYSTONE_AVAILABLE == 1:
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_asm32 asm32", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_asm64 asm64", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_arm32 arm32", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_arm64 arm64", res)
-        lldb.debugger.GetCommandInterpreter().HandleCommand("command script add -f lldbinit.cmd_armthumb armthumb", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_asm32 asm32", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_asm64 asm64", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_arm32 arm32", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_arm64 arm64", res)
+        ci.HandleCommand("command script add -f lldbinit.cmd_armthumb armthumb", res)
     # add the hook - we don't need to wait for a target to be loaded
-    lldb.debugger.GetCommandInterpreter().HandleCommand("target stop-hook add -o \"HandleHookStopOnTarget\"", res)
-    
+    ci.HandleCommand("target stop-hook add -o \"HandleHookStopOnTarget\"", res)
+    ci.HandleCommand("command script add --function lldbinit.cmd_banner banner", res)
+    debugger.HandleCommand("banner")
     return
+
+def cmd_banner(debugger,command,result,dict):    
+    print(COLORS["RED"] + "[+] Loaded lldbinit version: " + VERSION + COLORS["RESET"])
 
 def cmd_lldbinitcmds(debugger, command, result, dict):
     '''Display all available lldbinit commands.'''
@@ -560,7 +555,7 @@ def color(x):
     if CONFIG_ENABLE_COLOR == 0:
         output(out_col)
         return    
-    output(COLOR_ARRAY[x])
+    output(COLORS[x])
 
 # append data to the output that we display at the end of the hook-stop
 def output(x):
@@ -1570,16 +1565,16 @@ Note: expressions supported, do not use spaces between operators.
             break
         size = size - 1
     membuff = membuff + "\x00" * (0x100-size) 
-    color(BLUE)
+    color("BLUE")
     if get_pointer_size() == 4:
         output("[0x0000:0x%.08X]" % dump_addr)
         output("------------------------------------------------------")
     else:
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("------------------------------------------------------")
-    color(BOLD)
+    color("BOLD")
     output("[data]")
-    color(RESET)
+    color("RESET")
     output("\n")        
     #output(hexdump(dump_addr, membuff, " ", 16));
     index = 0
@@ -1614,7 +1609,7 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color(RESET)
+    color("RESET")
     #last element of the list has all data output...
     #so we remove last \n
     result.PutCString("".join(GlobalListOutput))
@@ -1671,16 +1666,16 @@ Note: expressions supported, do not use spaces between operators.
         size = size - 2
     membuff = membuff + "\x00" * (0x100-size)
 
-    color(BLUE)
+    color("BLUE")
     if get_pointer_size() == 4: #is_i386() or is_arm():
         output("[0x0000:0x%.08X]" % dump_addr)
         output("--------------------------------------------")
     else: #is_x64():
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("--------------------------------------------")
-    color(BOLD)
+    color("BOLD")
     output("[data]")
-    color(RESET)
+    color("RESET")
     output("\n")
     index = 0
     while index < 0x100:
@@ -1703,7 +1698,7 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color(RESET)
+    color("RESET")
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -1757,16 +1752,16 @@ Note: expressions supported, do not use spaces between operators.
             break
         size = size - 4
     membuff = membuff + bytes(0x100-size)
-    color(BLUE)
+    color("BLUE")
     if get_pointer_size() == 4: #is_i386() or is_arm():
         output("[0x0000:0x%.08X]" % dump_addr)
         output("----------------------------------------")
     else: #is_x64():
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("----------------------------------------")
-    color(BOLD)
+    color("BOLD")
     output("[data]")
-    color(RESET)
+    color("RESET")
     output("\n")
     index = 0
     while index < 0x100:
@@ -1785,7 +1780,7 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    color(RESET)
+    color("RESET")
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -1844,16 +1839,16 @@ Note: expressions supported, do not use spaces between operators.
         result.PutCString("".join(GlobalListOutput))
         return
 
-    color(BLUE)
+    color("BLUE")
     if get_pointer_size() == 4:
         output("[0x0000:0x%.08X]" % dump_addr)
         output("-------------------------------------------------------")
     else:
         output("[0x0000:0x%.016lX]" % dump_addr)
         output("-------------------------------------------------------")
-    color(BOLD)
+    color("BOLD")
     output("[data]")
-    color(RESET)
+    color("RESET")
     output("\n")   
     index = 0
     while index < 0x100:
@@ -1867,7 +1862,7 @@ Note: expressions supported, do not use spaces between operators.
             output("\n")
         index += 0x20
         dump_addr += 0x20
-    color(RESET)
+    color("RESET")
     result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
@@ -2028,16 +2023,16 @@ def cmd_findmem(debugger, command, result, dict):
             else:
                 ptrformat = "%.016lX"
 
-            color(RESET)
+            color("RESET")
             output("Found at : ")
-            color(GREEN)
+            color("GREEN")
             output(ptrformat % (mem_start + off))
-            color(RESET)
+            color("RESET")
             if base_displayed == 0:
                 output(" base : ")
-                color(YELLOW)
+                color("YELLOW")
                 output(ptrformat % mem_start)
-                color(RESET)
+                color("RESET")
                 base_displayed = 1
             else:
                 output("        ")
@@ -2594,7 +2589,7 @@ def dump_jumpx86(eflags):
         return
 
     mnemonic = get_mnemonic(pc_addr)
-    color(RED)
+    color("RED")
     output_string=""
     ## opcode 0x77: JA, JNBE (jump if CF=0 and ZF=0)
     ## opcode 0x0F87: JNBE, JA
@@ -2726,7 +2721,7 @@ def dump_jumpx86(eflags):
     else:
         output(output_string)
 
-    color(RESET)
+    color("RESET")
 
 def reg64():
     registers = get_gp_registers()
@@ -2789,11 +2784,11 @@ def reg64():
     old_x64["rsp"] = rsp
     
     output("  ")
-    color(BOLD)
-    color(UNDERLINE)
+    color("BOLD")
+    color("UNDERLINE")
     color(COLOR_CPUFLAGS)
     dump_eflags(rflags)
-    color(RESET)
+    color("RESET")
     
     output("\n")
             
@@ -3003,11 +2998,11 @@ def reg32():
     old_x86["edx"] = edx
     
     output("  ")
-    color(BOLD)
-    color(UNDERLINE)
+    color("BOLD")
+    color("UNDERLINE")
     color(COLOR_CPUFLAGS)
     dump_eflags(eflags)
-    color(RESET)
+    color("RESET")
     
     output("\n")
     
@@ -3167,12 +3162,12 @@ def regarm():
     old_arm["r3"] = r3
     
     output(" ")
-    color(BOLD)
-    color(UNDERLINE)
+    color("BOLD")
+    color("UNDERLINE")
     color(COLOR_CPUFLAGS)
     cpsr = get_gp_register("cpsr")
     dump_cpsr(cpsr)
-    color(RESET)
+    color("RESET")
 
     output("\n")
     
@@ -3479,7 +3474,7 @@ def disassemble(start_address, count):
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
                     output("@ {}:".format(module_name) + "\n")
-                    color(RESET)
+                    color("RESET")
                 else:
                     output("@ {}:".format(module_name) + "\n")            
         elif symbol_name != None:
@@ -3489,7 +3484,7 @@ def disassemble(start_address, count):
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
-                    color(RESET)
+                    color("RESET")
                 else:
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
                 blockstart_sbaddr = file_inst.addr.GetSymbol().GetStartAddress()
@@ -3562,10 +3557,10 @@ def disassemble(start_address, count):
                     comment = comment + " -> " + objc
 
             if CONFIG_ENABLE_COLOR == 1:
-                color(BOLD)
+                color("BOLD")
                 color(COLOR_CURRENT_PC)
                 output("->  0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
-                color(RESET)
+                color("RESET")
             else:
                 output("->  0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
         else:
@@ -4055,13 +4050,13 @@ def display_objc():
     membuff = get_process().ReadMemory(selector_addr, 0x100, err)
     strings = membuff.split('\00')
     if len(strings) != 0:
-        color(RED)
+        color("RED")
         output('Class: ')
-        color(RESET)
+        color("RESET")
         output(className)
-        color(RED)
+        color("RED")
         output(' Selector: ')
-        color(RESET)
+        color("RESET")
         output(strings[0])
 
 def display_indirect_flow():
@@ -4205,9 +4200,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     elif is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------")
             
-    color(BOLD)
+    color("BOLD")
     output("[regs]\n")
-    color(RESET)
+    color("RESET")
     print_registers()
 
     if CONFIG_DISPLAY_STACK_WINDOW == 1:
@@ -4216,9 +4211,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             output("--------------------------------------------------------------------------------")
         elif is_x64():
             output("----------------------------------------------------------------------------------------------------------------------")
-        color(BOLD)
+        color("BOLD")
         output("[stack]\n")
-        color(RESET)
+        color("RESET")
         display_stack()
         output("\n")
 
@@ -4228,9 +4223,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             output("---------------------------------------------------------------------------------")
         elif is_x64():
             output("-----------------------------------------------------------------------------------------------------------------------")
-        color(BOLD)
+        color("BOLD")
         output("[data]\n")
-        color(RESET)
+        color("RESET")
         display_data()
         output("\n")
 
@@ -4240,9 +4235,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
             output("---------------------------------------------------------------------------------")
         elif is_x64():
             output("-----------------------------------------------------------------------------------------------------------------------")
-        color(BOLD)
+        color("BOLD")
         output("[flow]\n")
-        color(RESET)
+        color("RESET")
         display_indirect_flow()
 
     color(COLOR_SEPARATOR)
@@ -4250,9 +4245,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         output("---------------------------------------------------------------------------------")
     elif is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------")
-    color(BOLD)
+    color("BOLD")
     output("[code]\n")
-    color(RESET)
+    color("RESET")
             
     # disassemble and add its contents to output inside
     disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
@@ -4262,7 +4257,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         output("---------------------------------------------------------------------------------------")
     elif get_pointer_size() == 8: #is_x64():
         output("-----------------------------------------------------------------------------------------------------------------------------")
-    color(RESET)
+    color("RESET")
     
     # XXX: do we really need to output all data into the array and then print it in a single go? faster to just print directly?
     # was it done this way because previously disassembly was capturing the output and modifying it?
