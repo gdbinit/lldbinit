@@ -4141,9 +4141,10 @@ def get_objectivec_selector(src_addr):
     className = classname_value.GetSummary().strip('"')
     selector_addr = get_gp_register("rsi")
     membuf = get_process().ReadMemory(selector_addr, 0x100, err)
-    strings = membuf.split('\00')
+    strings = membuf.split(b'\00')
     if len(strings) != 0:
-        return "[" + className + " " + strings[0] + "]"
+        methodName = strings[0].decode() if isinstance(strings[0], bytes) else strings[0]
+        return "[" + className + " " + methodName + "]"
     else:
         return "[" + className + "]"
     
