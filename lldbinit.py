@@ -1874,13 +1874,13 @@ def hexdump(addr, chars, sep, width, lines=5):
             break
         line = chars[:width]
         chars = chars[width:]
-        line = line.ljust( width, '\000' )
+        line = line.ljust( width, b"\000" )
         arch = get_arch()
         if get_pointer_size() == 4:
             szaddr = "0x%.08X" % addr
         else:
             szaddr = "0x%.016lX" % addr
-        l.append("\033[1m%s :\033[0m %s%s \033[1m%s\033[0m" % (szaddr, sep.join( "%02X" % ord(c) for c in line ), sep, quotechars( line )))
+        l.append("\033[1m%s :\033[0m %s%s \033[1m%s\033[0m" % (szaddr, sep.join( "%02X" % c for c in line ), sep, quotechars( line )))
         addr += 0x10
         line_count = line_count + 1
     return "\n".join(l)
@@ -3385,13 +3385,13 @@ def get_operands(source_address):
     # use current memory address
     # needs to be this way to workaround SBAddress init bug
     src_sbaddr = lldb.SBAddress()
-    src_sbaddr.load_addr = source_address
+    src_sbaddr.SetLoadAddress(source_address, target)
     instruction_list = target.ReadInstructions(src_sbaddr, 1, 'intel')
     if instruction_list.GetSize() == 0:
         print("[-] error: not enough instructions disassembled.")
         return ""    
     cur_instruction = instruction_list[0]
-    return cur_instruction.operands
+    return cur_instruction.GetOperands(target)
 
 # find out the size of an instruction using internal disassembler
 def get_inst_size(target_addr):
@@ -3422,7 +3422,7 @@ def disassemble(start_address, count):
     # we use the empty init and then set the property which is read/write for load_addr
     # this whole thing seems like a bug?
     mem_sbaddr = lldb.SBAddress()
-    mem_sbaddr.load_addr = start_address
+    mem_sbaddr.SetLoadAddress(start_address, target)
     # disassemble to get the file and memory version
     # we could compute this by finding sections etc but this way it seems
     # much simpler and faster
@@ -3448,7 +3448,7 @@ def disassemble(start_address, count):
     for i in instructions_mem:
         if i.size > max_size:
             max_size = i.size        
-        mnem_len = len(i.mnemonic)
+        mnem_len = len(i.GetMnemonic(target))
         if mnem_len > max_mnem_size:
             max_mnem_size = mnem_len
     
@@ -3480,20 +3480,20 @@ def disassemble(start_address, count):
         elif symbol_name is not None:
             # print the first time there is a symbol name and save its interval
             # so we don't print again until there is a different symbol
-            if blockstart_sbaddr is None or (int(file_inst.addr) < int(blockstart_sbaddr)) or (int(file_inst.addr) >= int(blockend_sbaddr)):
+            if blockstart_sbaddr is None or (file_inst.GetAddress().GetFileAddress() < blockstart_sbaddr.GetFileAddress()) or (file_inst.GetAddress().GetFileAddress() >= blockend_sbaddr.GetFileAddress()):
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
                     color("RESET")
                 else:
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
-                blockstart_sbaddr = file_inst.addr.GetSymbol().GetStartAddress()
-                blockend_sbaddr = file_inst.addr.GetSymbol().GetEndAddress()
+                blockstart_sbaddr = file_inst.GetAddress().GetSymbol().GetStartAddress()
+                blockend_sbaddr = file_inst.GetAddress().GetSymbol().GetEndAddress()
         
         # get the instruction bytes formatted as uint8
         inst_data = mem_inst.GetData(target).uint8
-        mnem = mem_inst.mnemonic
-        operands = mem_inst.operands
+        mnem = mem_inst.GetMnemonic(target)
+        operands = mem_inst.GetOperands(target)
         bytes_string = ""
         total_fill = max_size - mem_inst.size
         total_spaces = mem_inst.size - 1
@@ -3508,7 +3508,7 @@ def disassemble(start_address, count):
             bytes_string += "  " * total_fill
             bytes_string += " " * total_fill
         
-        mnem_len = len(mem_inst.mnemonic)
+        mnem_len = len(mem_inst.GetMnemonic(target))
         if mnem_len < max_mnem_size:
             missing_spaces = max_mnem_size - mnem_len
             mnem += " " * missing_spaces
@@ -3525,14 +3525,14 @@ def disassemble(start_address, count):
         file_addr = file_inst.addr.GetFileAddress()
         
         comment = ""
-        if file_inst.comment != "":
-            comment = " ; " + file_inst.comment
+        if file_inst.GetComment(target) != "":
+            comment = " ; " + file_inst.GetComment(target)
 
         if current_pc == memory_addr:
             # try to retrieve extra information if it's a branch instruction
             # used to resolve indirect branches and try to extract Objective-C selectors
             if mem_inst.DoesBranch():
-                flow_addr = get_indirect_flow_address(int(mem_inst.addr))
+                flow_addr = get_indirect_flow_address(mem_inst.GetAddress().GetLoadAddress(target))
                 if flow_addr > 0:
                     flow_module_name = get_module_name(flow_addr)
                     symbol_info = ""
@@ -4094,12 +4094,12 @@ def get_indirect_flow_address(src_addr):
     if cur_instruction.DoesBranch() == False:
         return -1
 
-    if "ret" in cur_instruction.mnemonic:
+    if "ret" in cur_instruction.GetMnemonic(target):
         ret_addr = get_ret_address()
         return ret_addr
-    if ("call" in cur_instruction.mnemonic) or ("jmp" in cur_instruction.mnemonic):
+    if ("call" in cur_instruction.GetMnemonic(target)) or ("jmp" in cur_instruction.GetMnemonic(target)):
         # don't care about RIP relative jumps
-        if cur_instruction.operands.startswith('0x'):
+        if cur_instruction.GetOperands(target).startswith('0x'):
             return -1
         indirect_addr = get_indirect_flow_target(src_addr)
         return indirect_addr
