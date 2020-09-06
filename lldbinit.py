@@ -117,7 +117,7 @@ CONFIG_LOG_LEVEL = "LOG_NONE"
 CUSTOM_DISASSEMBLY_FORMAT = "\"{${function.initial-function}{${function.name-without-args}} @ {${module.file.basename}}:\n}{${function.changed}\n{${function.name-without-args}} @ {${module.file.basename}}:\n}{${current-pc-arrow} }${addr-file-or-load}: \""
 
 # default colors - modify as you wish
-COLOR_REGVAL           = "BLACK"
+COLOR_REGVAL           = "WHITE"
 COLOR_REGNAME          = "GREEN"
 COLOR_CPUFLAGS         = "RED"
 COLOR_SEPARATOR        = "BLUE"
@@ -536,7 +536,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -588,7 +588,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -623,7 +623,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -667,7 +667,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -711,7 +711,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -774,7 +774,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint enable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -875,7 +875,7 @@ Note: expressions supported, do not use spaces between operators.
            return
         
         int3_addr = evaluate(cmd[0])
-        if int3_addr == None:
+        if int3_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -932,7 +932,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         int3_addr = evaluate(cmd[0])
-        if int3_addr == None:
+        if int3_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1025,21 +1025,21 @@ Note: expressions supported, do not use spaces between operators.
         
         nop_addr = evaluate(cmd[0])
         patch_size = 1
-        if nop_addr == None:
+        if nop_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
     elif len(cmd) == 2:
         nop_addr = evaluate(cmd[0])
-        if nop_addr == None:
+        if nop_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
         
         patch_size = evaluate(cmd[1])
-        if patch_size == None:
+        if patch_size is None:
             print("[-] error: invalid size value.")
             print("")
             print(help)
@@ -1084,20 +1084,20 @@ Note: expressions supported, do not use spaces between operators.
            return        
         null_addr = evaluate(cmd[0])
         patch_size = 1
-        if null_addr == None:
+        if null_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
     elif len(cmd) == 2:
         null_addr = evaluate(cmd[0])
-        if null_addr == None:
+        if null_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
         patch_size = evaluate(cmd[1])
-        if patch_size == None:
+        if patch_size is None:
             print("[-] error: invalid size value.")
             print("")
             print(help)
@@ -1313,7 +1313,7 @@ You probably want to use this at the top of the function you want to return from
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid return value.")
         print("")
         print(help)
@@ -1360,14 +1360,14 @@ Sets rax/eax to return value and returns immediately from current function where
 
     # XXX: is there a way to verify if address is valid? or just let lldb error when setting the breakpoint
     address = evaluate(cmd[0])
-    if address == None:
+    if address is None:
         print("[-] error: invalid address value.")
         print("")
         print(help)
         return
     
     return_value = evaluate(cmd[1])
-    if return_value == None:
+    if return_value is None:
         print("[-] error: invalid return value.")
         print("")
         print(help)
@@ -1403,7 +1403,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
             crack_entry = tmp_entry
             break
 
-    if crack_entry == None:
+    if crack_entry is None:
         print("[-] error: current breakpoint not found in list.")
         return
 
@@ -1447,7 +1447,7 @@ Sets the specified register to a value when the breakpoint at specified address 
         return
 
     address = evaluate(cmd[0])
-    if address == None:
+    if address is None:
         print("[-] error: invalid address.")
         print("")
         print(help)
@@ -1461,7 +1461,7 @@ Sets the specified register to a value when the breakpoint at specified address 
         return
     
     value = evaluate(cmd[2])
-    if value == None:
+    if value is None:
         print("[-] error: invalid value.")
         print("")
         print(help)
@@ -1500,7 +1500,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
             crack_entry = tmp_entry
             break
 
-    if crack_entry == None:
+    if crack_entry is None:
         print("[-] error: current breakpoint not found in list.")
         return
 
@@ -1542,7 +1542,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return        
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1642,7 +1642,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1729,7 +1729,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1811,7 +1811,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return        
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1923,25 +1923,25 @@ def cmd_findmem(debugger, command, result, dict):
 
     parser = parser.parse_args(arg.split())
     
-    if parser.string != None:
+    if parser.string is not None:
         search_string = parser.string
-    elif parser.unicode != None:
+    elif parser.unicode is not None:
         search_string  = unicode(parser.unicode)
-    elif parser.binary != None:
+    elif parser.binary is not None:
         search_string = parser.binary.decode("hex")
-    elif parser.dword != None:
+    elif parser.dword is not None:
         dword = evaluate(parser.dword)
-        if dword == None:
+        if dword is None:
             print("[-] Error evaluating : " + parser.dword)
             return
         search_string = struct.pack("I", dword & 0xffffffff)
-    elif parser.qword != None:
+    elif parser.qword is not None:
         qword = evaluate(parser.qword)
-        if qword == None:
+        if qword is None:
             print("[-] Error evaluating : " + parser.qword)
             return
         search_string = struct.pack("Q", qword & 0xffffffffffffffff)
-    elif parser.file != None:
+    elif parser.file is not None:
         f = 0
         try:
             f = open(parser.file, "rb")
@@ -1955,9 +1955,9 @@ def cmd_findmem(debugger, command, result, dict):
         return
     
     count = -1
-    if parser.count != None:
+    if parser.count is not None:
         count = evaluate(parser.count)
-        if count == None:
+        if count is None:
             print("[-] Error evaluating count : " + parser.count)
             return
     
@@ -2073,7 +2073,7 @@ Note: expressions supported, do not use spaces between operators.
         return        
 
     dump_addr = evaluate(cmd[0])
-    if dump_addr == None:
+    if dump_addr is None:
         print("[-] error: invalid address value.")
         print("")
         print(help)
@@ -2097,7 +2097,7 @@ def get_frame():
             ret = thread.GetFrameAtIndex(0)
             break
     # this will generate a false positive when we start the target the first time because there's no context yet.
-    if ret == None:
+    if ret is None:
         print("[-] warning: get_frame() failed. Is the target binary started?")
 
     return ret
@@ -2109,7 +2109,7 @@ def get_thread():
         if thread.GetStopReason() != lldb.eStopReasonNone and thread.GetStopReason() != lldb.eStopReasonInvalid:
             ret = thread
     
-    if ret == None:
+    if ret is None:
         print("[-] warning: get_thread() failed. Is the target binary started?")
 
     return ret
@@ -2129,7 +2129,7 @@ def get_process():
 # evaluate an expression and return the value it represents
 def evaluate(command):
     frame = get_frame()
-    if frame != None:
+    if frame is not None:
         value = frame.EvaluateExpression(command)
         if value.IsValid() == False:
             return None
@@ -2142,7 +2142,7 @@ def evaluate(command):
     # use the target version - if no target exists we can't do anything about it
     else:
         target = get_target()    
-        if target == None:
+        if target is None:
             return None
         value = target.EvaluateExpression(command)
         if value.IsValid() == False:
@@ -2195,7 +2195,7 @@ def get_instance_object():
 # return the int value of a general purpose register
 def get_gp_register(reg_name):
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return 0
     for reg in regs:
         if reg_name == reg.GetName():
@@ -2205,7 +2205,7 @@ def get_gp_register(reg_name):
 
 def get_gp_registers():
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return 0
     
     registers = {}
@@ -2216,7 +2216,7 @@ def get_gp_registers():
         
 def get_register(reg_name):
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return "0"
     for reg in regs:
         if reg_name == reg.GetName():
@@ -2229,7 +2229,7 @@ def get_registers(kind):
     Returns None if there's no such kind.
     """
     frame = get_frame()
-    if frame == None:
+    if frame is None:
         return None
     registerSet = frame.GetRegisters() # Return type of SBValueList.
     for value in registerSet:
@@ -2240,7 +2240,7 @@ def get_registers(kind):
 # retrieve current instruction pointer via platform independent $pc register
 def get_current_pc():
     frame = get_frame()
-    if frame == None:
+    if frame is None:
         return 0
     pc = frame.FindRegister("pc")
     return int(pc.GetValue(), 16)
@@ -2279,7 +2279,7 @@ Where value can be a single value or an expression.
         return
 
     value = evaluate(command)
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -3347,15 +3347,15 @@ def cmd_DumpInstructions(debugger, command, result, dict):
         disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
     elif len(cmd) == 1:
         address = evaluate(cmd[0])
-        if address == None:
+        if address is None:
             return
         disassemble(address, CONFIG_DISASSEMBLY_LINE_COUNT)
     else:
         address = evaluate(cmd[0])
-        if address == None:
+        if address is None:
             return
         count = evaluate(cmd[1])
-        if count == None:
+        if count is None:
             return
         disassemble(address, count)
 
@@ -3410,7 +3410,7 @@ def get_inst_size(target_addr):
 # we can customize output here instead of using the cmdline as before and grabbing its output
 def disassemble(start_address, count):
     target = get_target()
-    if target == None:
+    if target is None:
         return
     # this init will set a file_addr instead of expected load_addr
     # and so the disassembler output will be referenced to the file address
@@ -3469,7 +3469,7 @@ def disassemble(start_address, count):
         symbol_name = instructions_file[count].addr.GetSymbol().GetName()
         # if there is no symbol just display module where current instruction is
         # also get rid of unnamed symbols since they are useless
-        if symbol_name == None or "___lldb_unnamed_symbol" in symbol_name:
+        if symbol_name is None or "___lldb_unnamed_symbol" in symbol_name:
             if count == 0:
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
@@ -3477,10 +3477,10 @@ def disassemble(start_address, count):
                     color("RESET")
                 else:
                     output("@ {}:".format(module_name) + "\n")            
-        elif symbol_name != None:
+        elif symbol_name is not None:
             # print the first time there is a symbol name and save its interval
             # so we don't print again until there is a different symbol
-            if blockstart_sbaddr == None or (int(file_inst.addr) < int(blockstart_sbaddr)) or (int(file_inst.addr) >= int(blockend_sbaddr)):
+            if blockstart_sbaddr is None or (int(file_inst.addr) < int(blockstart_sbaddr)) or (int(file_inst.addr) >= int(blockend_sbaddr)):
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
@@ -3540,7 +3540,7 @@ def disassemble(start_address, count):
                     target_symbol_name = lldb.SBAddress(flow_addr,target).GetSymbol().GetName()
                     # if there is a symbol append to the string otherwise
                     # it will be empty and have no impact in output
-                    if target_symbol_name != None:
+                    if target_symbol_name is not None:
                         symbol_info = target_symbol_name + " @ "
                     
                     if comment == "":
@@ -3593,7 +3593,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         header_addr = evaluate(cmd[0])
-        if header_addr == None:
+        if header_addr is None:
             print("[-] error: invalid header address value.")
             print("")
             print(help)
@@ -3644,7 +3644,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         header_addr = evaluate(cmd[0])
-        if header_addr == None:
+        if header_addr is None:
             print("[-] error: invalid header address value.")
             print("")
             print(help)
@@ -3952,7 +3952,7 @@ def get_indirect_flow_target(source_address):
         # first we need to find the address to dereference
         if '+' in operand:
             x = re.search('\[([a-z0-9]{2,3} \+ 0x[0-9a-z]+)\]', operand)
-            if x == None:
+            if x is None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
             if value.IsValid() == False:                
@@ -3962,7 +3962,7 @@ def get_indirect_flow_target(source_address):
                 deref_addr = deref_addr + get_inst_size(source_address)
         else:
             x = re.search('\[([a-z0-9]{2,3})\]', operand)
-            if x == None:
+            if x is None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
             if value.IsValid() == False:                
@@ -3983,7 +3983,7 @@ def get_indirect_flow_target(source_address):
     elif operand.startswith('r') or operand.startswith('e'):
         #output("register call\n")
         x = re.search('([a-z0-9]{2,3})', operand)
-        if x == None:
+        if x is None:
             return 0
         #output("Result {}\n".format(x.group(1)))
         value = get_frame().EvaluateExpression("$" + x.group(1))
@@ -3996,7 +3996,7 @@ def get_indirect_flow_target(source_address):
         # the disassembler already did the dirty work for us
         # so we just extract the address
         x = re.search('(0x[0-9a-z]+)', operand)
-        if x != None:
+        if x is not None:
             #output("Result {}\n".format(x.group(0)))
             return int(x.group(1), 16)
     return 0
@@ -4111,7 +4111,7 @@ def get_module_name(src_addr):
     target = get_target()
     src_module = lldb.SBAddress(src_addr, target).module
     module_name = src_module.file.fullpath
-    if module_name == None:
+    if module_name is None:
         return ""
     else:
         return module_name
