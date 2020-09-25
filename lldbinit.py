@@ -4,12 +4,13 @@
 |    |   |    |     |    |  \|    |  _/  |/   |   \|  | |    |   
 |    |___|    |___  |    `   \    |   \  /    |    \  | |    |   
 |_______ \_______ \/_______  /______  /__\____|__  /__| |____|   
-        \/       \/        \/       \/           \/              LLDBINIT v2.0
+        \/       \/        \/       \/           \/
 
+LLDBINIT v2.0
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 (c) Deroko 2014, 2015, 2016
-(c) fG! 2017-2019 - reverser@put.as - https://reverse.put.as
+(c) fG! 2017-2020 - reverser@put.as - https://reverse.put.as
 
 Available at https://github.com/gdbinit/lldbinit
 
@@ -53,7 +54,7 @@ TODO:
 - command to update breakpoints with new ASLR
 - fix get_indirect_flow_target (we can get real load address of the modules - check the new disassembler code)
 - solve addresses like lea    rsi, [rip + 0x38cf] (lldb does solve some stuff that it has symbols for and adds the info as comment)
-- some sort of colors theme support?
+- some sort of colors theme support
 
 BUGS:
 -----
@@ -88,17 +89,24 @@ except:
     pass
 
 VERSION = "2.0"
+BUILD = "204"
 
 #
 # User configurable options
 #
 CONFIG_ENABLE_COLOR = 1
+# display the instruction bytes in disassembler output
 CONFIG_DISPLAY_DISASSEMBLY_BYTES = 1
+# the maximum number of lines to display in disassembler output
 CONFIG_DISASSEMBLY_LINE_COUNT = 8
+# x/i and disas output customization - doesn't affect context disassembler output
 CONFIG_USE_CUSTOM_DISASSEMBLY_FORMAT = 1
+# enable all the register command shortcuts
+CONFIG_ENABLE_REGISTER_SHORTCUTS = 1
+# display stack contents on context stop
 CONFIG_DISPLAY_STACK_WINDOW = 0
 CONFIG_DISPLAY_FLOW_WINDOW = 0
-CONFIG_ENABLE_REGISTER_SHORTCUTS = 1
+# display data contents on context stop - an address for the data must be set with "datawin" command
 CONFIG_DISPLAY_DATA_WINDOW = 0
 
 # setup the logging level, which is a bitmask of any of the following possible values (don't use spaces, doesn't seem to work)
@@ -146,12 +154,12 @@ COLORS = {
 
 DATA_WINDOW_ADDRESS = 0
 
-old_x86 = { "eax": 0, "ecx": 0, "edx": 0, "ebx": 0, "esp": 0, "ebp": 0, "esi": 0, "edi": 0, "eip": 0, "eflags": 0,
-        "cs": 0, "ds": 0, "fs": 0, "gs": 0, "ss": 0, "es": 0, }
+old_x86 = { "eax": 0, "ecx": 0, "edx": 0, "ebx": 0, "esp": 0, "ebp": 0, "esi": 0, "edi": 0, "eip": 0,
+            "eflags": 0, "cs": 0, "ds": 0, "fs": 0, "gs": 0, "ss": 0, "es": 0 }
 
-old_x64 = { "rax": 0, "rcx": 0, "rdx": 0, "rbx": 0, "rsp": 0, "rbp": 0, "rsi": 0, "rdi": 0, "rip": 0, "rflags": 0,
-        "cs": 0, "fs": 0, "gs": 0, "r8": 0, "r9": 0, "r10": 0, "r11": 0, "r12": 0, 
-        "r13": 0, "r14": 0, "r15": 0 }
+old_x64 = { "rax": 0, "rcx": 0, "rdx": 0, "rbx": 0, "rsp": 0, "rbp": 0, "rsi": 0, "rdi": 0, "rip": 0,
+            "r8": 0, "r9": 0, "r10": 0, "r11": 0, "r12": 0, "r13": 0, "r14": 0, "r15": 0,
+            "rflags": 0, "cs": 0, "fs": 0, "gs": 0 }
 
 old_arm = { "r0": 0, "r1": 0, "r2": 0, "r3": 0, "r4": 0, "r5": 0, "r6": 0, "r7": 0, "r8": 0, "r9": 0, "r10": 0, 
             "r11": 0, "r12": 0, "sp": 0, "lr": 0, "pc": 0, "cpsr": 0 }
@@ -160,12 +168,11 @@ arm_type = "thumbv7-apple-ios"
 
 GlobalListOutput = []
 
-Int3Dictionary = {}
+int3patches = {}
 
 crack_cmds = []
 crack_cmds_noret = []
-
-All_Registers = [ "rip", "rax", "rbx", "rbp", "rsp", "rdi", "rsi", "rdx", "rcx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "eip", "eax", "ebx", "ebp", "esp", "edi", "esi", "edx", "ecx" ]
+modules_list = []
 
 def __lldb_init_module(debugger, internal_dict):
     ''' we can execute commands using debugger.HandleCommand which makes all output to default
@@ -328,7 +335,7 @@ def __lldb_init_module(debugger, internal_dict):
     return
 
 def cmd_banner(debugger,command,result,dict):    
-    print(COLORS["RED"] + "[+] Loaded lldbinit version: " + VERSION + COLORS["RESET"])
+    print(COLORS["RED"] + "[+] Loaded lldbinit version: " + VERSION + "." + BUILD + COLORS["RESET"])
 
 def cmd_lldbinitcmds(debugger, command, result, dict):
     '''Display all available lldbinit commands.'''
@@ -536,7 +543,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -588,7 +595,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -623,7 +630,7 @@ Note: expressions supported, do not use spaces between operators.
         return
     
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -667,7 +674,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -711,7 +718,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -774,7 +781,7 @@ Note: expressions supported, do not use spaces between operators.
 
     # breakpoint enable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value - only a breakpoint number is valid.")
         print("")
         print(help)
@@ -857,7 +864,7 @@ Note: ARM not yet supported.
 Note: expressions supported, do not use spaces between operators.
 """
 
-    global Int3Dictionary
+    global int3patches
 
     error = lldb.SBError()
     target = get_target()
@@ -875,7 +882,7 @@ Note: expressions supported, do not use spaces between operators.
            return
         
         int3_addr = evaluate(cmd[0])
-        if int3_addr == None:
+        if int3_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -900,7 +907,7 @@ Note: expressions supported, do not use spaces between operators.
         return
 
     # save original bytes for later restore
-    Int3Dictionary[str(int3_addr)] = bytes_read[0]
+    int3patches[str(int3_addr)] = bytes_read[0]
 
     print("[+] Patched INT3 at 0x{:x}".format(int3_addr))
     return
@@ -915,7 +922,7 @@ Syntax: rint3 [<address>]
 Note: expressions supported, do not use spaces between operators.
 """
 
-    global Int3Dictionary
+    global int3patches
 
     error = lldb.SBError()
     target = get_target()
@@ -932,7 +939,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         int3_addr = evaluate(cmd[0])
-        if int3_addr == None:
+        if int3_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -943,7 +950,7 @@ Note: expressions supported, do not use spaces between operators.
         print(help)
         return
 
-    if len(Int3Dictionary) == 0:
+    if len(int3patches) == 0:
         print("[-] error: No INT3 patched addresses to restore available.")
         return
 
@@ -957,7 +964,7 @@ Note: expressions supported, do not use spaces between operators.
     if bytes_read[0] == 0xCC:
         #print("Found byte patched byte at 0x{:x}".format(int3_addr))
         try:
-            original_byte = Int3Dictionary[str(int3_addr)]
+            original_byte = int3patches[str(int3_addr)]
         except:
             print("[-] error: Original byte for address 0x{:x} not found.".format(int3_addr))
             return
@@ -967,7 +974,7 @@ Note: expressions supported, do not use spaces between operators.
             print("[-] error: Failed to write memory at 0x{:x}.".format(int3_addr))
             return
         # remove element from original bytes list
-        del Int3Dictionary[str(int3_addr)]
+        del int3patches[str(int3_addr)]
     else:
         print("[-] error: No INT3 patch found at 0x{:x}.".format(int3_addr))
 
@@ -991,12 +998,12 @@ Syntax: listint3
         print(help)
         return
 
-    if len(Int3Dictionary) == 0:
+    if len(int3patches) == 0:
         print("[-] No INT3 patched addresses available.")
         return
 
     print("Current INT3 patched addresses:")
-    for address, byte in Int3Dictionary.items():
+    for address, byte in int3patches.items():
         print("[*] {:s}".format(hex(int(address, 10))))
 
     return
@@ -1025,21 +1032,21 @@ Note: expressions supported, do not use spaces between operators.
         
         nop_addr = evaluate(cmd[0])
         patch_size = 1
-        if nop_addr == None:
+        if nop_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
     elif len(cmd) == 2:
         nop_addr = evaluate(cmd[0])
-        if nop_addr == None:
+        if nop_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
         
         patch_size = evaluate(cmd[1])
-        if patch_size == None:
+        if patch_size is None:
             print("[-] error: invalid size value.")
             print("")
             print(help)
@@ -1084,20 +1091,20 @@ Note: expressions supported, do not use spaces between operators.
            return        
         null_addr = evaluate(cmd[0])
         patch_size = 1
-        if null_addr == None:
+        if null_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
     elif len(cmd) == 2:
         null_addr = evaluate(cmd[0])
-        if null_addr == None:
+        if null_addr is None:
             print("[-] error: invalid address value.")
             print("")
             print(help)
             return
         patch_size = evaluate(cmd[1])
-        if patch_size == None:
+        if patch_size is None:
             print("[-] error: invalid size value.")
             print("")
             print(help)
@@ -1313,7 +1320,7 @@ You probably want to use this at the top of the function you want to return from
 
     # breakpoint disable only accepts breakpoint numbers not addresses
     value = evaluate(cmd[0])
-    if value == None:
+    if value is None:
         print("[-] error: invalid return value.")
         print("")
         print(help)
@@ -1360,14 +1367,14 @@ Sets rax/eax to return value and returns immediately from current function where
 
     # XXX: is there a way to verify if address is valid? or just let lldb error when setting the breakpoint
     address = evaluate(cmd[0])
-    if address == None:
+    if address is None:
         print("[-] error: invalid address value.")
         print("")
         print(help)
         return
     
     return_value = evaluate(cmd[1])
-    if return_value == None:
+    if return_value is None:
         print("[-] error: invalid return value.")
         print("")
         print(help)
@@ -1403,7 +1410,7 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
             crack_entry = tmp_entry
             break
 
-    if crack_entry == None:
+    if crack_entry is None:
         print("[-] error: current breakpoint not found in list.")
         return
 
@@ -1447,27 +1454,30 @@ Sets the specified register to a value when the breakpoint at specified address 
         return
 
     address = evaluate(cmd[0])
-    if address == None:
+    register = cmd[1]
+    value = evaluate(cmd[2])
+
+    if address is None:
         print("[-] error: invalid address.")
         print("")
         print(help)
         return
 
     # check if register is set and valid
-    if (cmd[1] in All_Registers) == False:
+    valid = [ "rip", "rax", "rbx", "rbp", "rsp", "rdi", "rsi", "rdx", "rcx", "r8", "r9", 
+              "r10", "r11", "r12", "r13", "r14", "r15", "eip", "eax", "ebx", "ebp", "esp",
+               "edi", "esi", "edx", "ecx" ]
+    if register not in valid:
         print("[-] error: invalid register.")
         print("")
         print(help)
         return
     
-    value = evaluate(cmd[2])
-    if value == None:
+    if value is None:
         print("[-] error: invalid value.")
         print("")
         print(help)
         return
-
-    register = cmd[1]
     
     for tmp_entry in crack_cmds_noret:
         if tmp_entry['address'] == address:
@@ -1500,7 +1510,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
             crack_entry = tmp_entry
             break
 
-    if crack_entry == None:
+    if crack_entry is None:
         print("[-] error: current breakpoint not found in list.")
         return
 
@@ -1542,7 +1552,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return        
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1642,7 +1652,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1729,7 +1739,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1811,7 +1821,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return        
         dump_addr = evaluate(cmd[0])
-        if dump_addr == None:
+        if dump_addr is None:
             print("[-] error: invalid input address value.")
             print("")
             print(help)
@@ -1874,7 +1884,7 @@ def hexdump(addr, chars, sep, width, lines=5):
             break
         line = chars[:width]
         chars = chars[width:]
-        line = line.ljust( width, '\000' )
+        line = line.ljust( width, b'\000' )
         arch = get_arch()
         if get_pointer_size() == 4:
             szaddr = "0x%.08X" % addr
@@ -1923,25 +1933,25 @@ def cmd_findmem(debugger, command, result, dict):
 
     parser = parser.parse_args(arg.split())
     
-    if parser.string != None:
+    if parser.string is not None:
         search_string = parser.string
-    elif parser.unicode != None:
+    elif parser.unicode is not None:
         search_string  = unicode(parser.unicode)
-    elif parser.binary != None:
+    elif parser.binary is not None:
         search_string = parser.binary.decode("hex")
-    elif parser.dword != None:
+    elif parser.dword is not None:
         dword = evaluate(parser.dword)
-        if dword == None:
+        if dword is None:
             print("[-] Error evaluating : " + parser.dword)
             return
         search_string = struct.pack("I", dword & 0xffffffff)
-    elif parser.qword != None:
+    elif parser.qword is not None:
         qword = evaluate(parser.qword)
-        if qword == None:
+        if qword is None:
             print("[-] Error evaluating : " + parser.qword)
             return
         search_string = struct.pack("Q", qword & 0xffffffffffffffff)
-    elif parser.file != None:
+    elif parser.file is not None:
         f = 0
         try:
             f = open(parser.file, "rb")
@@ -1955,9 +1965,9 @@ def cmd_findmem(debugger, command, result, dict):
         return
     
     count = -1
-    if parser.count != None:
+    if parser.count is not None:
         count = evaluate(parser.count)
-        if count == None:
+        if count is None:
             print("[-] Error evaluating count : " + parser.count)
             return
     
@@ -2073,7 +2083,7 @@ Note: expressions supported, do not use spaces between operators.
         return        
 
     dump_addr = evaluate(cmd[0])
-    if dump_addr == None:
+    if dump_addr is None:
         print("[-] error: invalid address value.")
         print("")
         print(help)
@@ -2097,7 +2107,7 @@ def get_frame():
             ret = thread.GetFrameAtIndex(0)
             break
     # this will generate a false positive when we start the target the first time because there's no context yet.
-    if ret == None:
+    if ret is None:
         print("[-] warning: get_frame() failed. Is the target binary started?")
 
     return ret
@@ -2109,7 +2119,7 @@ def get_thread():
         if thread.GetStopReason() != lldb.eStopReasonNone and thread.GetStopReason() != lldb.eStopReasonInvalid:
             ret = thread
     
-    if ret == None:
+    if ret is None:
         print("[-] warning: get_thread() failed. Is the target binary started?")
 
     return ret
@@ -2129,7 +2139,7 @@ def get_process():
 # evaluate an expression and return the value it represents
 def evaluate(command):
     frame = get_frame()
-    if frame != None:
+    if frame is not None:
         value = frame.EvaluateExpression(command)
         if value.IsValid() == False:
             return None
@@ -2142,7 +2152,7 @@ def evaluate(command):
     # use the target version - if no target exists we can't do anything about it
     else:
         target = get_target()    
-        if target == None:
+        if target is None:
             return None
         value = target.EvaluateExpression(command)
         if value.IsValid() == False:
@@ -2195,7 +2205,7 @@ def get_instance_object():
 # return the int value of a general purpose register
 def get_gp_register(reg_name):
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return 0
     for reg in regs:
         if reg_name == reg.GetName():
@@ -2205,7 +2215,7 @@ def get_gp_register(reg_name):
 
 def get_gp_registers():
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return 0
     
     registers = {}
@@ -2216,7 +2226,7 @@ def get_gp_registers():
         
 def get_register(reg_name):
     regs = get_registers("general purpose")
-    if regs == None:
+    if regs is None:
         return "0"
     for reg in regs:
         if reg_name == reg.GetName():
@@ -2229,7 +2239,7 @@ def get_registers(kind):
     Returns None if there's no such kind.
     """
     frame = get_frame()
-    if frame == None:
+    if frame is None:
         return None
     registerSet = frame.GetRegisters() # Return type of SBValueList.
     for value in registerSet:
@@ -2240,7 +2250,7 @@ def get_registers(kind):
 # retrieve current instruction pointer via platform independent $pc register
 def get_current_pc():
     frame = get_frame()
-    if frame == None:
+    if frame is None:
         return 0
     pc = frame.FindRegister("pc")
     return int(pc.GetValue(), 16)
@@ -2279,7 +2289,7 @@ Where value can be a single value or an expression.
         return
 
     value = evaluate(command)
-    if value == None:
+    if value is None:
         print("[-] error: invalid input value.")
         print("")
         print(help)
@@ -3347,15 +3357,15 @@ def cmd_DumpInstructions(debugger, command, result, dict):
         disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
     elif len(cmd) == 1:
         address = evaluate(cmd[0])
-        if address == None:
+        if address is None:
             return
         disassemble(address, CONFIG_DISASSEMBLY_LINE_COUNT)
     else:
         address = evaluate(cmd[0])
-        if address == None:
+        if address is None:
             return
         count = evaluate(cmd[1])
-        if count == None:
+        if count is None:
             return
         disassemble(address, count)
 
@@ -3379,19 +3389,19 @@ def get_mnemonic(target_addr):
     return mnemonic
 
 # returns the instruction operands
-def get_operands(source_address):
+def get_operands(src_address):
     err = lldb.SBError()
     target = get_target()
     # use current memory address
     # needs to be this way to workaround SBAddress init bug
     src_sbaddr = lldb.SBAddress()
-    src_sbaddr.load_addr = source_address
+    src_sbaddr.SetLoadAddress(src_address, target)
     instruction_list = target.ReadInstructions(src_sbaddr, 1, 'intel')
     if instruction_list.GetSize() == 0:
         print("[-] error: not enough instructions disassembled.")
         return ""    
     cur_instruction = instruction_list[0]
-    return cur_instruction.operands
+    return cur_instruction.GetOperands(target)
 
 # find out the size of an instruction using internal disassembler
 def get_inst_size(target_addr):
@@ -3410,7 +3420,7 @@ def get_inst_size(target_addr):
 # we can customize output here instead of using the cmdline as before and grabbing its output
 def disassemble(start_address, count):
     target = get_target()
-    if target == None:
+    if target is None:
         return
     # this init will set a file_addr instead of expected load_addr
     # and so the disassembler output will be referenced to the file address
@@ -3422,7 +3432,7 @@ def disassemble(start_address, count):
     # we use the empty init and then set the property which is read/write for load_addr
     # this whole thing seems like a bug?
     mem_sbaddr = lldb.SBAddress()
-    mem_sbaddr.load_addr = start_address
+    mem_sbaddr.SetLoadAddress(start_address, target)
     # disassemble to get the file and memory version
     # we could compute this by finding sections etc but this way it seems
     # much simpler and faster
@@ -3441,14 +3451,14 @@ def disassemble(start_address, count):
     if instructions_mem.GetSize() != instructions_file.GetSize():
         print("[-] error: instructions arrays sizes are different.")
         return
-    # find out the biggest instruction lenght and mnemonic length
+    # find out the biggest instruction length and mnemonic length
     # so we can have a uniform output
     max_size = 0
     max_mnem_size = 0
     for i in instructions_mem:
         if i.size > max_size:
             max_size = i.size        
-        mnem_len = len(i.mnemonic)
+        mnem_len = len(i.GetMnemonic(target))
         if mnem_len > max_mnem_size:
             max_mnem_size = mnem_len
     
@@ -3459,8 +3469,8 @@ def disassemble(start_address, count):
     module_name = module.file.fullpath
 
     count = 0
-    blockstart_sbaddr = None
-    blockend_sbaddr = None
+    blockstart_symaddr = None
+    blockend_symaddr = None
     for mem_inst in instructions_mem:
         # get the same instruction but from the file version because we need some info from it
         file_inst = instructions_file[count]
@@ -3469,7 +3479,7 @@ def disassemble(start_address, count):
         symbol_name = instructions_file[count].addr.GetSymbol().GetName()
         # if there is no symbol just display module where current instruction is
         # also get rid of unnamed symbols since they are useless
-        if symbol_name == None or "___lldb_unnamed_symbol" in symbol_name:
+        if symbol_name is None or "___lldb_unnamed_symbol" in symbol_name:
             if count == 0:
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
@@ -3477,38 +3487,41 @@ def disassemble(start_address, count):
                     color("RESET")
                 else:
                     output("@ {}:".format(module_name) + "\n")            
-        elif symbol_name != None:
+        elif symbol_name is not None:
             # print the first time there is a symbol name and save its interval
             # so we don't print again until there is a different symbol
-            if blockstart_sbaddr == None or (int(file_inst.addr) < int(blockstart_sbaddr)) or (int(file_inst.addr) >= int(blockend_sbaddr)):
+            file_symaddr = file_inst.GetAddress().GetFileAddress()
+            if blockstart_symaddr is None or (file_symaddr < blockstart_symaddr) or (file_symaddr >= blockend_symaddr):
                 if CONFIG_ENABLE_COLOR == 1:
                     color(COLOR_SYMBOL_NAME)
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
                     color("RESET")
                 else:
                     output("{} @ {}:".format(symbol_name, module_name) + "\n")
-                blockstart_sbaddr = file_inst.addr.GetSymbol().GetStartAddress()
-                blockend_sbaddr = file_inst.addr.GetSymbol().GetEndAddress()
+                blockstart_symaddr = file_inst.GetAddress().GetSymbol().GetStartAddress().GetFileAddress()
+                blockend_symaddr = file_inst.GetAddress().GetSymbol().GetEndAddress().GetFileAddress()
+
         
         # get the instruction bytes formatted as uint8
         inst_data = mem_inst.GetData(target).uint8
-        mnem = mem_inst.mnemonic
-        operands = mem_inst.operands
+        mnem = mem_inst.GetMnemonic(target)
+        operands = mem_inst.GetOperands(target)
         bytes_string = ""
-        total_fill = max_size - mem_inst.size
-        total_spaces = mem_inst.size - 1
-        for x in inst_data:
-            bytes_string += "{:02x}".format(x)
-            if total_spaces > 0:
-                bytes_string += " "
-                total_spaces -= 1
-        if total_fill > 0:
-            # we need one more space because the last byte doesn't have space
-            # and if we are smaller than max size we are one space short
-            bytes_string += "  " * total_fill
-            bytes_string += " " * total_fill
+        if CONFIG_DISPLAY_DISASSEMBLY_BYTES == 1:
+            total_fill = max_size - mem_inst.size
+            total_spaces = mem_inst.size - 1
+            for x in inst_data:
+                bytes_string += "{:02x}".format(x)
+                if total_spaces > 0:
+                    bytes_string += " "
+                    total_spaces -= 1
+            if total_fill > 0:
+                # we need one more space because the last byte doesn't have space
+                # and if we are smaller than max size we are one space short
+                bytes_string += "  " * total_fill
+                bytes_string += " " * total_fill
         
-        mnem_len = len(mem_inst.mnemonic)
+        mnem_len = len(mem_inst.GetMnemonic(target))
         if mnem_len < max_mnem_size:
             missing_spaces = max_mnem_size - mnem_len
             mnem += " " * missing_spaces
@@ -3525,14 +3538,14 @@ def disassemble(start_address, count):
         file_addr = file_inst.addr.GetFileAddress()
         
         comment = ""
-        if file_inst.comment != "":
-            comment = " ; " + file_inst.comment
+        if file_inst.GetComment(target) != "":
+            comment = " ; " + file_inst.GetComment(target)
 
         if current_pc == memory_addr:
             # try to retrieve extra information if it's a branch instruction
             # used to resolve indirect branches and try to extract Objective-C selectors
             if mem_inst.DoesBranch():
-                flow_addr = get_indirect_flow_address(int(mem_inst.addr))
+                flow_addr = get_indirect_flow_address(mem_inst.GetAddress().GetLoadAddress(target))
                 if flow_addr > 0:
                     flow_module_name = get_module_name(flow_addr)
                     symbol_info = ""
@@ -3540,18 +3553,20 @@ def disassemble(start_address, count):
                     target_symbol_name = lldb.SBAddress(flow_addr,target).GetSymbol().GetName()
                     # if there is a symbol append to the string otherwise
                     # it will be empty and have no impact in output
-                    if target_symbol_name != None:
+                    if target_symbol_name is not None:
                         symbol_info = target_symbol_name + " @ "
                     
                     if comment == "":
                         # remove space for instructions without operands
-                        if mem_inst.operands == "":
+                        if mem_inst.GetOperands(target) == "":
                             comment = "; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
                         else:
                             comment = " ; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
                     else:
                         comment = comment + " " + hex(flow_addr) + " @ " + flow_module_name
-                
+                else:
+                    comment = ""
+
                 objc = get_objectivec_selector(current_pc)
                 if objc != "":
                     comment = comment + " -> " + objc
@@ -3593,7 +3608,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         header_addr = evaluate(cmd[0])
-        if header_addr == None:
+        if header_addr is None:
             print("[-] error: invalid header address value.")
             print("")
             print(help)
@@ -3644,7 +3659,7 @@ Note: expressions supported, do not use spaces between operators.
            print(help)
            return
         header_addr = evaluate(cmd[0])
-        if header_addr == None:
+        if header_addr is None:
             print("[-] error: invalid header address value.")
             print("")
             print(help)
@@ -3918,32 +3933,32 @@ def display_data():
     output(hexdump(data_addr, membuff, " ", 16, 4))
 
 # workaround for lldb bug regarding RIP addressing outside main executable
-def get_rip_relative_addr(source_address):
+def get_rip_relative_addr(src_address):
     err = lldb.SBError()
     target = get_target()
-    inst_size = get_inst_size(source_address)
+    inst_size = get_inst_size(src_address)
     if inst_size <= 1:
         print("[-] error: instruction size too small.")
         return 0
     # XXX: problem because it's not just 2 and 5 bytes
     # 0x7fff53fa2180 (0x1180): 0f 85 84 01 00 00     jne    0x7fff53fa230a ; stack_not_16_byte_aligned_error
 
-    offset_bytes = get_process().ReadMemory(source_address+1, inst_size-1, err)
+    offset_bytes = get_process().ReadMemory(src_address+1, inst_size-1, err)
     if err.Success() == False:
-        print("[-] error: Failed to read memory at 0x{:x}.".format(source_address))
+        print("[-] error: Failed to read memory at 0x{:x}.".format(src_address))
         return 0
     if inst_size == 2:
         data = struct.unpack("b", offset_bytes)
     elif inst_size == 5:
         data = struct.unpack("i", offset_bytes)
-    rip_call_addr = source_address + inst_size + data[0]
-    #output("source {:x} rip call offset {:x} {:x}\n".format(source_address, data[0], rip_call_addr))
+    rip_call_addr = src_address + inst_size + data[0]
+    #output("source {:x} rip call offset {:x} {:x}\n".format(src_address, data[0], rip_call_addr))
     return rip_call_addr
 
 # XXX: instead of reading memory we can dereference right away in the evaluation
-def get_indirect_flow_target(source_address):
+def get_indirect_flow_target(src_address):
     err = lldb.SBError()
-    operand = get_operands(source_address)
+    operand = get_operands(src_address)
     #output("Operand: {}\n".format(operand))
     # calls into a deferenced memory address
     if "qword" in operand:
@@ -3952,17 +3967,27 @@ def get_indirect_flow_target(source_address):
         # first we need to find the address to dereference
         if '+' in operand:
             x = re.search('\[([a-z0-9]{2,3} \+ 0x[0-9a-z]+)\]', operand)
-            if x == None:
+            if x is None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
             if value.IsValid() == False:                
                 return 0
             deref_addr = int(value.GetValue(), 10)
             if "rip" in operand:
-                deref_addr = deref_addr + get_inst_size(source_address)
+                deref_addr = deref_addr + get_inst_size(src_address)
+        elif '-' in operand:
+            x = re.search('\[([a-z0-9]{2,3} \- 0x[0-9a-z]+)\]', operand)
+            if x is None:
+                return 0
+            value = get_frame().EvaluateExpression("$" + x.group(1))
+            if value.IsValid() == False:                
+                return 0
+            deref_addr = int(value.GetValue(), 10)
+            if "rip" in operand:
+                deref_addr = deref_addr + get_inst_size(src_address)
         else:
             x = re.search('\[([a-z0-9]{2,3})\]', operand)
-            if x == None:
+            if x is None:
                 return 0
             value = get_frame().EvaluateExpression("$" + x.group(1))
             if value.IsValid() == False:                
@@ -3983,7 +4008,7 @@ def get_indirect_flow_target(source_address):
     elif operand.startswith('r') or operand.startswith('e'):
         #output("register call\n")
         x = re.search('([a-z0-9]{2,3})', operand)
-        if x == None:
+        if x is None:
             return 0
         #output("Result {}\n".format(x.group(1)))
         value = get_frame().EvaluateExpression("$" + x.group(1))
@@ -3996,7 +4021,7 @@ def get_indirect_flow_target(source_address):
         # the disassembler already did the dirty work for us
         # so we just extract the address
         x = re.search('(0x[0-9a-z]+)', operand)
-        if x != None:
+        if x is not None:
             #output("Result {}\n".format(x.group(0)))
             return int(x.group(1), 16)
     return 0
@@ -4048,7 +4073,7 @@ def display_objc():
     selector_addr = get_gp_register("rsi")
 
     membuff = get_process().ReadMemory(selector_addr, 0x100, err)
-    strings = membuff.split('\00')
+    strings = membuff.split(b'\00')
     if len(strings) != 0:
         color("RED")
         output('Class: ')
@@ -4094,12 +4119,12 @@ def get_indirect_flow_address(src_addr):
     if cur_instruction.DoesBranch() == False:
         return -1
 
-    if "ret" in cur_instruction.mnemonic:
+    if "ret" in cur_instruction.GetMnemonic(target):
         ret_addr = get_ret_address()
         return ret_addr
-    if ("call" in cur_instruction.mnemonic) or ("jmp" in cur_instruction.mnemonic):
+    if ("call" in cur_instruction.GetMnemonic(target)) or ("jmp" in cur_instruction.GetMnemonic(target)):
         # don't care about RIP relative jumps
-        if cur_instruction.operands.startswith('0x'):
+        if cur_instruction.GetOperands(target).startswith('0x'):
             return -1
         indirect_addr = get_indirect_flow_target(src_addr)
         return indirect_addr
@@ -4111,7 +4136,7 @@ def get_module_name(src_addr):
     target = get_target()
     src_module = lldb.SBAddress(src_addr, target).module
     module_name = src_module.file.fullpath
-    if module_name == None:
+    if module_name is None:
         return ""
     else:
         return module_name
@@ -4141,9 +4166,10 @@ def get_objectivec_selector(src_addr):
     className = classname_value.GetSummary().strip('"')
     selector_addr = get_gp_register("rsi")
     membuf = get_process().ReadMemory(selector_addr, 0x100, err)
-    strings = membuf.split('\00')
+    strings = membuf.split(b'\00')
     if len(strings) != 0:
-        return "[" + className + " " + strings[0] + "]"
+        methodName = strings[0].decode() if isinstance(strings[0], bytes) else strings[0]
+        return "[" + className + " " + methodName + "]"
     else:
         return "[" + className + "]"
     

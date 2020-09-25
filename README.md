@@ -3,7 +3,7 @@
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 (c) Deroko 2014, 2015, 2016  
-(c) fG! 2017, 2019 - reverser@put.as - https://reverse.put.as
+(c) fG! 2017, 2020 - reverser@put.as - https://reverse.put.as
 
 Available at https://github.com/gdbinit/lldbinit
 
@@ -20,7 +20,7 @@ Some of the commands that were passed to lldb command line were converted to int
 
 ### Requirements
 
-Tested with LLDB out of Xcode 9.x and 10.x, should work with older and newer versions.  
+Tested with LLDB out of Xcode 9.x and 12.x, should work with older and newer versions.  
 Optional Keystone Engine (https://www.keystone-engine.org) for assembler support.
 
 ### How to install
