@@ -1565,16 +1565,13 @@ Note: expressions supported, do not use spaces between operators.
 
     err = lldb.SBError()
     size = 0x100
-    while size != 0:
-        membuff = get_process().ReadMemory(dump_addr, size, err)
-        if err.Success() == False and size == 0:
-            output(str(err))
-            result.PutCString("".join(GlobalListOutput))
-            return
-        if err.Success() == True:
-            break
-        size = size - 1
-    membuff = membuff + "\x00" * (0x100-size) 
+    membuf = get_process().ReadMemory(dump_addr, size, err)
+    if err.Success() == False:
+        print("[-] error: failed to read memory from address 0x{:x}".format(dump_addr))
+        result.PutCString("".join(GlobalListOutput))
+        result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
+        return
+
     color("BLUE")
     if get_pointer_size() == 4:
         output("[0x0000:0x%.08X]" % dump_addr)
@@ -1589,7 +1586,7 @@ Note: expressions supported, do not use spaces between operators.
     #output(hexdump(dump_addr, membuff, " ", 16));
     index = 0
     while index < 0x100:
-        data = struct.unpack("B"*16, membuff[index:index+0x10])
+        data = struct.unpack("B"*16, membuf[index:index+0x10])
         if get_pointer_size() == 4:
             szaddr = "0x%.08X" % dump_addr
         else:
@@ -1614,7 +1611,7 @@ Note: expressions supported, do not use spaces between operators.
             data[13], 
             data[14], 
             data[15], 
-            quotechars(membuff[index:index+0x10])));
+            quotechars(membuf[index:index+0x10])));
         if index + 0x10 != 0x100:
             output("\n")
         index += 0x10
@@ -1665,16 +1662,12 @@ Note: expressions supported, do not use spaces between operators.
 
     err = lldb.SBError()
     size = 0x100
-    while size != 0:
-        membuff = get_process().ReadMemory(dump_addr, size, err)
-        if err.Success() == False and size == 0:
-            output(str(err))
-            result.PutCString("".join(GlobalListOutput))
-            return
-        if err.Success() == True:
-            break
-        size = size - 2
-    membuff = membuff + "\x00" * (0x100-size)
+    membuf = get_process().ReadMemory(dump_addr, size, err)
+    if err.Success() == False:
+        print("[-] error: failed to read memory from address 0x{:x}".format(dump_addr))
+        result.PutCString("".join(GlobalListOutput))
+        result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
+        return
 
     color("BLUE")
     if get_pointer_size() == 4: #is_i386() or is_arm():
@@ -1689,7 +1682,7 @@ Note: expressions supported, do not use spaces between operators.
     output("\n")
     index = 0
     while index < 0x100:
-        data = struct.unpack("HHHHHHHH", membuff[index:index+0x10])
+        data = struct.unpack("HHHHHHHH", membuf[index:index+0x10])
         if get_pointer_size() == 4:
             szaddr = "0x%.08X" % dump_addr
         else:
@@ -1703,7 +1696,7 @@ Note: expressions supported, do not use spaces between operators.
             data[5],
             data[6],
             data[7],
-            quotechars(membuff[index:index+0x10])));
+            quotechars(membuf[index:index+0x10])));
         if index + 0x10 != 0x100:
             output("\n")
         index += 0x10
@@ -1752,16 +1745,12 @@ Note: expressions supported, do not use spaces between operators.
 
     err = lldb.SBError()
     size = 0x100
-    while size != 0:    
-        membuff = get_process().ReadMemory(dump_addr, size, err)
-        if err.Success() == False and size == 0:
-            output(str(err))
-            result.PutCString("".join(GlobalListOutput))
-            return
-        if err.Success() == True:
-            break
-        size = size - 4
-    membuff = membuff + bytes(0x100-size)
+    membuf = get_process().ReadMemory(dump_addr, size, err)
+    if err.Success() == False:
+        print("[-] error: failed to read memory from address 0x{:x}".format(dump_addr))
+        result.PutCString("".join(GlobalListOutput))
+        result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
+        return
     color("BLUE")
     if get_pointer_size() == 4: #is_i386() or is_arm():
         output("[0x0000:0x%.08X]" % dump_addr)
@@ -1775,7 +1764,7 @@ Note: expressions supported, do not use spaces between operators.
     output("\n")
     index = 0
     while index < 0x100:
-        (mem0, mem1, mem2, mem3) = struct.unpack("IIII", membuff[index:index+0x10])
+        (mem0, mem1, mem2, mem3) = struct.unpack("IIII", membuf[index:index+0x10])
         if get_pointer_size() == 4: #is_i386() or is_arm():
             szaddr = "0x%.08X" % dump_addr
         else:  #is_x64():
@@ -1785,7 +1774,7 @@ Note: expressions supported, do not use spaces between operators.
                                             mem1, 
                                             mem2, 
                                             mem3, 
-                                            quotechars(membuff[index:index+0x10])));
+                                            quotechars(membuf[index:index+0x10])));
         if index + 0x10 != 0x100:
             output("\n")
         index += 0x10
@@ -1834,19 +1823,11 @@ Note: expressions supported, do not use spaces between operators.
 
     err = lldb.SBError()
     size = 0x100
-    while size != 0:
-        membuff = get_process().ReadMemory(dump_addr, size, err)
-        if err.Success() == False and size == 0:
-            output(str(err))
-            result.PutCString("".join(GlobalListOutput))
-            return
-        if err.Success() == True:
-            break
-        size = size - 8
-    membuff = membuff + "\x00" * (0x100-size)
+    membuf = get_process().ReadMemory(dump_addr, size, err)
     if err.Success() == False:
-        output(str(err))
+        print("[-] error: failed to read memory from address 0x{:x}".format(dump_addr))
         result.PutCString("".join(GlobalListOutput))
+        result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         return
 
     color("BLUE")
@@ -1862,7 +1843,7 @@ Note: expressions supported, do not use spaces between operators.
     output("\n")   
     index = 0
     while index < 0x100:
-        (mem0, mem1, mem2, mem3) = struct.unpack("QQQQ", membuff[index:index+0x20])
+        (mem0, mem1, mem2, mem3) = struct.unpack("QQQQ", membuf[index:index+0x20])
         if get_pointer_size() == 4:
             szaddr = "0x%.08X" % dump_addr
         else:
