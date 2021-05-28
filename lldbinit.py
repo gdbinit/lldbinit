@@ -2097,7 +2097,7 @@ Note: expressions supported, do not use spaces between operators.
 # ----------------------------------------------------------
 
 def get_arch():
-    return lldb.debugger.GetSelectedTarget().triple.split(b'-')[0]
+    return lldb.debugger.GetSelectedTarget().triple.split('-')[0]
 
 #return frame for stopped thread... there should be one at least...
 def get_frame():
