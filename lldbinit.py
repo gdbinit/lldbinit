@@ -11,6 +11,7 @@ A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 (c) Deroko 2014, 2015, 2016
 (c) fG! 2017-2020 - reverser@put.as - https://reverse.put.as
+(c) unix-ninja 2021 - https://www.unix-ninja.com
 
 Available at https://github.com/gdbinit/lldbinit
 
@@ -89,7 +90,7 @@ except:
     pass
 
 VERSION = "2.0"
-BUILD = "205"
+BUILD = "206"
 
 #
 # User configurable options
@@ -173,6 +174,10 @@ int3patches = {}
 crack_cmds = []
 crack_cmds_noret = []
 modules_list = []
+
+# function to normalize integers for base 10 and 16
+def auto_int(x):
+    return int(x, 0)
 
 def __lldb_init_module(debugger, internal_dict):
     ''' we can execute commands using debugger.HandleCommand which makes all output to default
@@ -1911,6 +1916,7 @@ def cmd_findmem(debugger, command, result, dict):
     parser.add_argument("-q", "--qword",   help="Find qword (native packing)")
     parser.add_argument("-f", "--file" ,   help="Load find pattern from file")
     parser.add_argument("-c", "--count",   help="How many occurances to find, default is all")
+    parser.add_argument("--max-range",   help="Do not search memory regions which start passed this range", type=auto_int)
 
     parser = parser.parse_args(arg.split())
     
@@ -1969,10 +1975,20 @@ def cmd_findmem(debugger, command, result, dict):
         m = p.search(x)
         if not m: continue
         tmp = []
+        # grab our variables
         mem_name  = m.group(1)
         mem_range = m.group(2)
         mem_start = int(mem_range.split(b"-")[0], 16)
         mem_end   = int(mem_range.split(b"-")[1], 16)
+
+        # make sure we are within expected search range
+        if parser.max_range is not None:
+            if mem_start > parser.max_range:
+                continue
+            if mem_end > parser.max_range:
+                mem_end = parser.max_range
+
+        # store our results
         tmp.append(mem_name)
         tmp.append(mem_start)
         tmp.append(mem_end)
