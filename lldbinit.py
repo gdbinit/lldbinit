@@ -89,7 +89,7 @@ except:
     pass
 
 VERSION = "2.0"
-BUILD = "204"
+BUILD = "205"
 
 #
 # User configurable options
@@ -1239,7 +1239,7 @@ def cmd_LoadBreakPointsRva(debugger, command, result, dict):
         line = line.rstrip()
         if not line: 
             break
-        debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + long(line, 16)))
+        debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + int(line, 16)))
     f.close()
 
 
@@ -1955,37 +1955,41 @@ def cmd_findmem(debugger, command, result, dict):
     process = get_process()
     pid = process.GetProcessID()
     output_data = subprocess.check_output(["/usr/bin/vmmap", "%d" % pid])
-    lines = output_data.split("\n")
+    #print(output_data)
+    lines = output_data.split(b"\n")
     #print(lines);
-    #this relies on output from /usr/bin/vmmap so code is dependant on that 
-    #only reason why it's used is for better description of regions, which is
-    #nice to have. If they change vmmap in the future, I'll use my version 
-    #and that output is much easier to parse...
+    # this relies on output from /usr/bin/vmmap so code is dependant on that 
+    # only reason why it's used is for better description of regions, which is
+    # nice to have. If they change vmmap in the future, I'll use my version 
+    # and that output is much easier to parse...
     newlines = []
     for x in lines:
-        p = re.compile("([\S\s]+)\s([\da-fA-F]{16}-[\da-fA-F]{16}|[\da-fA-F]{8}-[\da-fA-F]{8})")
+        #p = re.compile(b"([\S\s]+)\s([\da-fA-F]{16}-[\da-fA-F]{16}|[\da-fA-F]{8}-[\da-fA-F]{8})")
+        p = re.compile(b"^(\S+)\s+([\da-fA-F]{8,16}-[\da-fA-F]{8,16})")
         m = p.search(x)
         if not m: continue
         tmp = []
         mem_name  = m.group(1)
         mem_range = m.group(2)
-        #0x000000-0x000000
-        mem_start = long(mem_range.split("-")[0], 16)
-        mem_end   = long(mem_range.split("-")[1], 16)
+        mem_start = int(mem_range.split(b"-")[0], 16)
+        mem_end   = int(mem_range.split(b"-")[1], 16)
         tmp.append(mem_name)
         tmp.append(mem_start)
         tmp.append(mem_end)
         newlines.append(tmp)
     
     lines = sorted(newlines, key=lambda sortnewlines: sortnewlines[1])
-    #move line extraction a bit up, thus we can latter sort it, as vmmap gives
-    #readable pages only, and then writable pages, so it looks ugly a bit :)
+    # move line extraction a bit up, thus we can latter sort it, as vmmap gives
+    # readable pages only, and then writable pages, so it looks ugly a bit :)
     newlines = []
     for x in lines:
         mem_name = x[0]
         mem_start= x[1]
         mem_end  = x[2]
         mem_size = mem_end - mem_start
+
+        #print ("%s  %s  %s" % (mem_name, mem_start, mem_end))
+        #continue
     
         err = lldb.SBError()
                 
@@ -2000,7 +2004,7 @@ def cmd_findmem(debugger, command, result, dict):
         while True:
             if count == 0: 
                 return
-            idx = membuff.find(search_string)
+            idx = membuff.find(search_string.encode('utf-8'))
             if idx == -1: 
                 break
             if count != -1:
@@ -2031,7 +2035,7 @@ def cmd_findmem(debugger, command, result, dict):
                     output(" " * 8)
                 else:
                     output(" " * 16)
-            #well if somebody allocated 4GB of course offset will be to small to fit here
+            #well if somebody allocated 4GB of course offset will be too small to fit here
             #but who cares...
             output(" off : %.08X %s" % (off, mem_name))
             print("".join(GlobalListOutput))
@@ -2077,7 +2081,7 @@ Note: expressions supported, do not use spaces between operators.
 # ----------------------------------------------------------
 
 def get_arch():
-    return lldb.debugger.GetSelectedTarget().triple.split('-')[0]
+    return lldb.debugger.GetSelectedTarget().triple.split(b'-')[0]
 
 #return frame for stopped thread... there should be one at least...
 def get_frame():
@@ -2163,7 +2167,7 @@ def is_arm():
     return False
 
 def get_pointer_size():
-    poisz = evaluate("sizeof(long)")
+    poisz = evaluate("sizeof(int)")
     return poisz
 
 # from https://github.com/facebook/chisel/blob/master/fblldbobjcruntimehelpers.py
