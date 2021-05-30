@@ -11,6 +11,7 @@ A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 (c) Deroko 2014, 2015, 2016
 (c) fG! 2017-2020 - reverser@put.as - https://reverse.put.as
+(c) unix-ninja 2021 - https://www.unix-ninja.com
 
 Available at https://github.com/gdbinit/lldbinit
 
@@ -89,7 +90,7 @@ except:
     pass
 
 VERSION = "2.0"
-BUILD = "204"
+BUILD = "207"
 
 #
 # User configurable options
@@ -173,6 +174,10 @@ int3patches = {}
 crack_cmds = []
 crack_cmds_noret = []
 modules_list = []
+
+# function to normalize integers for base 10 and 16
+def auto_int(x):
+    return int(x, 0)
 
 def __lldb_init_module(debugger, internal_dict):
     ''' we can execute commands using debugger.HandleCommand which makes all output to default
@@ -1239,7 +1244,7 @@ def cmd_LoadBreakPointsRva(debugger, command, result, dict):
         line = line.rstrip()
         if not line: 
             break
-        debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + long(line, 16)))
+        debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + int(line, 16)))
     f.close()
 
 
@@ -1904,22 +1909,23 @@ def cmd_findmem(debugger, command, result, dict):
 
     arg = str(command)
     parser = argparse.ArgumentParser(prog="lldb")
-    parser.add_argument("-s", "--string",  help="Search string")
-    parser.add_argument("-u", "--unicode", help="Search unicode string")
+    parser.add_argument("-s", "--string",  help="Search unicode string")
     parser.add_argument("-b", "--binary",  help="Serach binary string")
     parser.add_argument("-d", "--dword",   help="Find dword (native packing)")
     parser.add_argument("-q", "--qword",   help="Find qword (native packing)")
     parser.add_argument("-f", "--file" ,   help="Load find pattern from file")
     parser.add_argument("-c", "--count",   help="How many occurances to find, default is all")
+    parser.add_argument("--min-range",   help="Do not search memory regions which start before this range", type=auto_int)
+    parser.add_argument("--max-range",   help="Do not search memory regions which start passed this range", type=auto_int)
 
     parser = parser.parse_args(arg.split())
     
     if parser.string is not None:
-        search_string = parser.string
-    elif parser.unicode is not None:
-        search_string  = unicode(parser.unicode)
+        search_string = parser.string.encode('utf-8')
     elif parser.binary is not None:
-        search_string = parser.binary.decode("hex")
+        if parser.binary[0:2] == "0x":
+            parser.binary = parser.binary[2:]
+        search_string = bytes.fromhex(parser.binary)
     elif parser.dword is not None:
         dword = evaluate(parser.dword)
         if dword is None:
@@ -1955,31 +1961,47 @@ def cmd_findmem(debugger, command, result, dict):
     process = get_process()
     pid = process.GetProcessID()
     output_data = subprocess.check_output(["/usr/bin/vmmap", "%d" % pid])
-    lines = output_data.split("\n")
-    #print(lines);
-    #this relies on output from /usr/bin/vmmap so code is dependant on that 
-    #only reason why it's used is for better description of regions, which is
-    #nice to have. If they change vmmap in the future, I'll use my version 
-    #and that output is much easier to parse...
+    lines = output_data.split(b"\n")
+    # this relies on output from /usr/bin/vmmap so code is dependant on that 
+    # only reason why it's used is for better description of regions, which is
+    # nice to have. If they change vmmap in the future, I'll use my version 
+    # and that output is much easier to parse...
     newlines = []
     for x in lines:
-        p = re.compile("([\S\s]+)\s([\da-fA-F]{16}-[\da-fA-F]{16}|[\da-fA-F]{8}-[\da-fA-F]{8})")
+        # this regex creates 2 capture groups
+        # the first will find the first non-whitespace sequence in the row
+        # the second will grab any hex ranges, each between 8 and 16 characters long
+        p = re.compile(b"^(\S+)\s+([\da-fA-F]{8,16}-[\da-fA-F]{8,16})")
         m = p.search(x)
         if not m: continue
         tmp = []
+        # grab our variables
         mem_name  = m.group(1)
         mem_range = m.group(2)
-        #0x000000-0x000000
-        mem_start = long(mem_range.split("-")[0], 16)
-        mem_end   = long(mem_range.split("-")[1], 16)
+        mem_start = int(mem_range.split(b"-")[0], 16)
+        mem_end   = int(mem_range.split(b"-")[1], 16)
+
+        # make sure we are within expected search range
+        if parser.min_range is not None:
+            if mem_end < parser.min_range:
+                continue
+            if mem_start < parser.min_range:
+                mem_start = parser.min_range
+        if parser.max_range is not None:
+            if mem_start > parser.max_range:
+                continue
+            if mem_end > parser.max_range:
+                mem_end = parser.max_range
+
+        # store our results
         tmp.append(mem_name)
         tmp.append(mem_start)
         tmp.append(mem_end)
         newlines.append(tmp)
     
     lines = sorted(newlines, key=lambda sortnewlines: sortnewlines[1])
-    #move line extraction a bit up, thus we can latter sort it, as vmmap gives
-    #readable pages only, and then writable pages, so it looks ugly a bit :)
+    # move line extraction a bit up, thus we can latter sort it, as vmmap gives
+    # readable pages only, and then writable pages, so it looks ugly a bit :)
     newlines = []
     for x in lines:
         mem_name = x[0]
@@ -1991,8 +2013,6 @@ def cmd_findmem(debugger, command, result, dict):
                 
         membuff = process.ReadMemory(mem_start, mem_size, err)
         if err.Success() == False:
-            #output(str(err));
-            #result.PutCString("".join(GlobalListOutput));
             continue
         off = 0
         base_displayed = 0
@@ -2031,8 +2051,8 @@ def cmd_findmem(debugger, command, result, dict):
                     output(" " * 8)
                 else:
                     output(" " * 16)
-            #well if somebody allocated 4GB of course offset will be to small to fit here
-            #but who cares...
+            # well if somebody allocated 4GB of course offset will be too small to fit here
+            # but who cares...
             output(" off : %.08X %s" % (off, mem_name))
             print("".join(GlobalListOutput))
             membuff = membuff[idx+len(search_string):]
@@ -2163,7 +2183,7 @@ def is_arm():
     return False
 
 def get_pointer_size():
-    poisz = evaluate("sizeof(long)")
+    poisz = evaluate("sizeof(int)")
     return poisz
 
 # from https://github.com/facebook/chisel/blob/master/fblldbobjcruntimehelpers.py
