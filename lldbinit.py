@@ -1960,16 +1960,16 @@ def cmd_findmem(debugger, command, result, dict):
     process = get_process()
     pid = process.GetProcessID()
     output_data = subprocess.check_output(["/usr/bin/vmmap", "%d" % pid])
-    #print(output_data)
     lines = output_data.split(b"\n")
-    #print(lines);
     # this relies on output from /usr/bin/vmmap so code is dependant on that 
     # only reason why it's used is for better description of regions, which is
     # nice to have. If they change vmmap in the future, I'll use my version 
     # and that output is much easier to parse...
     newlines = []
     for x in lines:
-        #p = re.compile(b"([\S\s]+)\s([\da-fA-F]{16}-[\da-fA-F]{16}|[\da-fA-F]{8}-[\da-fA-F]{8})")
+        # this regex creates 2 capture groups
+        # the first will find the first non-whitespace sequence in the row
+        # the second will grab any hex ranges, each between 8 and 16 characters long
         p = re.compile(b"^(\S+)\s+([\da-fA-F]{8,16}-[\da-fA-F]{8,16})")
         m = p.search(x)
         if not m: continue
@@ -2010,8 +2010,6 @@ def cmd_findmem(debugger, command, result, dict):
                 
         membuff = process.ReadMemory(mem_start, mem_size, err)
         if err.Success() == False:
-            #output(str(err));
-            #result.PutCString("".join(GlobalListOutput));
             continue
         off = 0
         base_displayed = 0
@@ -2050,8 +2048,8 @@ def cmd_findmem(debugger, command, result, dict):
                     output(" " * 8)
                 else:
                     output(" " * 16)
-            #well if somebody allocated 4GB of course offset will be too small to fit here
-            #but who cares...
+            # well if somebody allocated 4GB of course offset will be too small to fit here
+            # but who cares...
             output(" off : %.08X %s" % (off, mem_name))
             print("".join(GlobalListOutput))
             membuff = membuff[idx+len(search_string):]
