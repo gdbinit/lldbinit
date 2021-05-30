@@ -1909,8 +1909,7 @@ def cmd_findmem(debugger, command, result, dict):
 
     arg = str(command)
     parser = argparse.ArgumentParser(prog="lldb")
-    parser.add_argument("-s", "--string",  help="Search string")
-    parser.add_argument("-u", "--unicode", help="Search unicode string")
+    parser.add_argument("-s", "--string",  help="Search unicode string")
     parser.add_argument("-b", "--binary",  help="Serach binary string")
     parser.add_argument("-d", "--dword",   help="Find dword (native packing)")
     parser.add_argument("-q", "--qword",   help="Find qword (native packing)")
@@ -1921,11 +1920,11 @@ def cmd_findmem(debugger, command, result, dict):
     parser = parser.parse_args(arg.split())
     
     if parser.string is not None:
-        search_string = parser.string
-    elif parser.unicode is not None:
-        search_string  = unicode(parser.unicode)
+        search_string = parser.string.encode('utf-8')
     elif parser.binary is not None:
-        search_string = parser.binary.decode("hex")
+        if parser.binary[0:2] == "0x":
+            parser.binary = parser.binary[2:]
+        search_string = bytes.fromhex(parser.binary)
     elif parser.dword is not None:
         dword = evaluate(parser.dword)
         if dword is None:
@@ -2020,7 +2019,7 @@ def cmd_findmem(debugger, command, result, dict):
         while True:
             if count == 0: 
                 return
-            idx = membuff.find(search_string.encode('utf-8'))
+            idx = membuff.find(search_string)
             if idx == -1: 
                 break
             if count != -1:
