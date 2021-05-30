@@ -2002,9 +2002,6 @@ def cmd_findmem(debugger, command, result, dict):
         mem_start= x[1]
         mem_end  = x[2]
         mem_size = mem_end - mem_start
-
-        #print ("%s  %s  %s" % (mem_name, mem_start, mem_end))
-        #continue
     
         err = lldb.SBError()
                 
