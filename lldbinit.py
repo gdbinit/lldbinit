@@ -90,7 +90,7 @@ except:
     pass
 
 VERSION = "2.0"
-BUILD = "206"
+BUILD = "207"
 
 #
 # User configurable options
@@ -1915,6 +1915,7 @@ def cmd_findmem(debugger, command, result, dict):
     parser.add_argument("-q", "--qword",   help="Find qword (native packing)")
     parser.add_argument("-f", "--file" ,   help="Load find pattern from file")
     parser.add_argument("-c", "--count",   help="How many occurances to find, default is all")
+    parser.add_argument("--min-range",   help="Do not search memory regions which start before this range", type=auto_int)
     parser.add_argument("--max-range",   help="Do not search memory regions which start passed this range", type=auto_int)
 
     parser = parser.parse_args(arg.split())
@@ -1981,6 +1982,11 @@ def cmd_findmem(debugger, command, result, dict):
         mem_end   = int(mem_range.split(b"-")[1], 16)
 
         # make sure we are within expected search range
+        if parser.min_range is not None:
+            if mem_end < parser.min_range:
+                continue
+            if mem_start < parser.min_range:
+                mem_start = parser.min_range
         if parser.max_range is not None:
             if mem_start > parser.max_range:
                 continue
