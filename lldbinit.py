@@ -100,7 +100,7 @@ except ImportError:
     pass
 
 VERSION = "3.0"
-BUILD = "344"
+BUILD = "346"
 
 #
 # User configurable options
@@ -3993,7 +3993,10 @@ def disassemble(start_address, nrlines):
                             comment = " ; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
                     else:
                         comment = comment + " " + hex(flow_addr) + " @ " + flow_module_name
-
+                # for arm64 targets there is a branch to a subroutine that does the real call to the objc_msgSend
+                # and the selector string is there - the symbol name does contain the name
+                # so we can either extract it from here or read the information from the subroutine
+                # or not worth the trouble since the symbol name always has lots of info
                 className, selectorName = get_objectivec_selector(current_pc)
                 if className != "":
                     if selectorName != "":
@@ -4444,10 +4447,20 @@ def get_indirect_flow_target(src_address):
         # the modifier is zero for Z terminated functions so we only see one operand
         if mnemonic in ('braa', 'brab', 'blraa', 'blrab'):
             operand = operand.split(',')[0].strip(' ')
+            # remove the PAC
+            # XXX: what is really the number of bits? can't find good documentation on this :(
+            # https://github.com/lelegard/arm-cpusysregs/blob/main/docs/arm64e-on-macos.md
+            # says it's 47 bits for macOS
+            # https://googleprojectzero.blogspot.com/2019/02/examining-pointer-authentication-on.html
+            # talks about higher number of bits for iOS
         value = get_frame().EvaluateExpression("$" + operand)
         if not value.IsValid():
             return 0
-        return int(value.GetValue(), 10)
+        ret = int(value.GetValue(), 10)
+        if mnemonic in ('braa', 'braaz', 'brab', 'brabz', 'blraa', 'blraaz', 'blrab', 'blrabz'):
+            # let's go with 47 bits for now...
+            ret &= 0xFFFFFFFFFFFF
+        return ret
     # RIP relative calls
     # the disassembly output already contains the target address so we just need to extract it
     # and don't need to compute anything ourselves
@@ -4513,13 +4526,13 @@ def display_indirect_flow():
     mnemonic = get_mnemonic(pc_addr)
 
     # x86 and arm64 (including pac versions)
-    if mnemonic in "ret":
+    if mnemonic.startswith("ret"):
         indirect_addr = get_ret_address(pc_addr)
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
         output("\n")
         return
 
-    if mnemonic in ('call', 'callq', 'jmp', 'br', 'bl', 'b', 'blraa', 'blraaz', 'blrab', 'blrabz' ):
+    if mnemonic in ('call', 'callq', 'jmp', 'br', 'bl', 'b', 'braa', 'braaz', 'brab', 'brabz', 'blraa', 'blraaz', 'blrab', 'blrabz'):
         # we need to identify the indirect target address
         indirect_addr = get_indirect_flow_target(pc_addr)
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
@@ -4548,7 +4561,7 @@ def get_indirect_flow_address(src_addr):
     if not cur_instruction.DoesBranch():
         return -1
 
-    if "ret" in cur_instruction.GetMnemonic(target):
+    if cur_instruction.GetMnemonic(target).startswith("ret"):
         ret_addr = get_ret_address(src_addr)
         return ret_addr
     elif cur_instruction.GetMnemonic(target) in ( 'call', 'jmp' ):
@@ -4557,7 +4570,7 @@ def get_indirect_flow_address(src_addr):
             return -1
         indirect_addr = get_indirect_flow_target(src_addr)
         return indirect_addr
-    elif cur_instruction.GetMnemonic(target) in ( 'br', 'blr', 'blraa', 'blraaz', 'blrab', 'blrabz' ):
+    elif cur_instruction.GetMnemonic(target) in ('br', 'blr', 'braa', 'braaz', 'brab', 'brabz', 'blraa', 'blraaz', 'blrab', 'blrabz'):
         indirect_addr = get_indirect_flow_target(src_addr)
         return indirect_addr
 
