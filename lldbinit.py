@@ -100,7 +100,7 @@ except ImportError:
     pass
 
 VERSION = "3.0"
-BUILD = "346"
+BUILD = "347"
 
 #
 # User configurable options
@@ -1874,7 +1874,7 @@ Note: control flow is not respected, it breakpoints next instruction in memory.
 
     print("[+] Set temporary breakpoint at 0x{:x}".format(next_addr))
 
-# command that sets rax to 1 or 0 and returns right away from current function
+# command that sets rax/eax/x0 to 1 or 0 and returns right away from current function
 # technically just a shortcut to "thread return"
 def cmd_crack(debugger, command, result, dict):
     '''Return from current function and set return value. Use \'crack help\' for more information.'''
@@ -1883,7 +1883,7 @@ Return from current function and set return value
 
 Syntax: crack <return value>
 
-Sets rax to return value and returns immediately from current function.
+Sets rax/eax/x0 to return value and returns immediately from current function.
 You probably want to use this at the top of the function you want to return from.
 """
 
@@ -1895,10 +1895,6 @@ You probably want to use this at the top of the function you want to return from
         return
     if cmd[0] == "help":
         print(help)
-        return
-
-    if is_arm():
-        print("[-] error: unsupported architecture for this command.")
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
@@ -1917,8 +1913,17 @@ You probably want to use this at the top of the function you want to return from
     # if we do a lldb.SBValue() we can't set to that type
     # so we need to make a copy
     # can we use FindRegister() from frame?
-    return_value = frame.reg["rax"]
+    if is_x64():
+        return_value = frame.reg["rax"]
+    elif is_arm():
+        return_value = frame.reg["x0"]
+    elif is_i386():
+        return_value = frame.reg["eax"]
+    else:
+        print("[-] error: unsupported architecture.")
+        return
     return_value.value = str(value)
+    # XXX: should check the frame count and validate if there is something to return to
     get_thread().ReturnFromFrame(frame, return_value)
 
 # set a breakpoint with return command associated when hit
@@ -1929,7 +1934,7 @@ Breakpoint an address, when breakpoint is hit return from function and set retur
 
 Syntax: crackcmd <address> <return value>
 
-Sets rax/eax to return value and returns immediately from current function where breakpoint was set.
+Sets rax/eax/x0 to return value and returns immediately from current function where breakpoint was set.
 """
     global crack_cmds
 
@@ -1961,10 +1966,6 @@ Sets rax/eax to return value and returns immediately from current function where
         print("[-] error: invalid return value.")
         print("")
         print(help)
-        return
-
-    if is_arm():
-        print("[-] error: unsupported architecture for this command.")
         return
 
     for tmp_entry in crack_cmds:
@@ -2004,6 +2005,8 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
     # we can just set the register in the frame and return empty SBValue
     if is_x64():
         frame.reg["rax"].value = str(crack_entry['return_value']).rstrip('L')
+    elif is_arm():
+        frame.reg["x0"].value = str(crack_entry['return_value']).rstrip('L')
     elif is_i386():
         frame.reg["eax"].value = str(crack_entry['return_value']).rstrip('L')
     else:
@@ -2038,10 +2041,6 @@ Syntax: crackcmd_noret <address> <register> <value>
         print(help)
         return
 
-    if is_arm():
-        print("[-] Unsupported architecture for this command.")
-        return
-
     address = evaluate(cmd[0])
     register = cmd[1]
     value = evaluate(cmd[2])
@@ -2053,15 +2052,25 @@ Syntax: crackcmd_noret <address> <register> <value>
         return
 
     # check if register is set and valid
-    valid = [ "rip", "rax", "rbx", "rbp", "rsp", "rdi", "rsi", "rdx", "rcx", "r8", "r9", 
-              "r10", "r11", "r12", "r13", "r14", "r15", "eip", "eax", "ebx", "ebp", "esp",
-               "edi", "esi", "edx", "ecx" ]
+    if is_x64():
+        valid = [ "rip","rax","rbx","rbp","rsp","rdi","rsi","rdx","rcx","r8","r9","r10","r11","r12","r13","r14","r15" ]
+        if register not in valid:
+            print("[-] error: invalid register for x64 architecture.")
+            print(help)
+            return
+    elif is_arm():
+        valid = [ "x0","x1","x2","x3","x4","x5","x6","x7","x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","x18","x19","x20","x21","x22","x23","x24","x25","x26","x27","x28","fp","lr","sp","pc","cpsr" ]
+        if register not in valid:
+            print("[-] error: invalid register for arm64 architecture.")
+            print(help)
+            return
+    elif is_i386():
+        valid = [ "eip", "eax", "ebx", "ebp", "esp", "edi", "esi", "edx", "ecx" ]
     if register not in valid:
-        print("[-] error: invalid register.")
-        print("")
+            print("[-] error: invalid register for i386 architecture.")
         print(help)
         return
-    
+
     if value is None:
         print("[-] error: invalid value.")
         print("")
