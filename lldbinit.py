@@ -2066,10 +2066,10 @@ Syntax: crackcmd_noret <address> <register> <value>
             return
     elif is_i386():
         valid = [ "eip", "eax", "ebx", "ebp", "esp", "edi", "esi", "edx", "ecx" ]
-    if register not in valid:
+        if register not in valid:
             print("[-] error: invalid register for i386 architecture.")
-        print(help)
-        return
+            print(help)
+            return
 
     if value is None:
         print("[-] error: invalid value.")
