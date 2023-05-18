@@ -80,17 +80,18 @@ lldb -> debugger -> target -> process -> thread -> frame(s)
 if __name__ == "__main__":
     print("Run only as script from LLDB... Not as standalone program!")
 
-import lldb    
-import sys
-import re
-import os
-import time
-import struct
 import argparse
+import fcntl
+import os
+import re
+import struct
 import subprocess
+import sys
 import tempfile
 import termios
-import fcntl
+import time
+
+import lldb
 
 try:
     import keystone
@@ -100,7 +101,7 @@ except ImportError:
     pass
 
 VERSION = "3.0"
-BUILD = "347"
+BUILD = "348"
 
 #
 # User configurable options
@@ -743,22 +744,28 @@ def antidebug_callback_step2(frame, bp_loc, dict):
 # this deals with the breakpoint at sysctl symbol
 # the purpose is to verify the request and set a second stage on return address
 # where the debug flag is removed
+# Anti-debug implementation example
+# https://alexomara.com/blog/defeating-anti-debug-techniques-macos-amibeingdebugged/
 def antidebug_callback_step1(frame, bp_loc, dict):
     global ANTIDEBUG_SYSCTL_OBJS
     if frame is None:
         return 0
     target = get_target()
-    rdi = int(frame.FindRegister('rdi').GetValue(), 16)
+    if is_x64():
+        reg_name = "rdi"
+    elif is_arm():
+        reg_name = "x0"
+    mib_addr = int(frame.FindRegister(reg_name).GetValue(), 16)
     error = lldb.SBError()
-    mib0 = get_process().ReadUnsignedFromMemory(rdi, 4, error)
+    mib0 = get_process().ReadUnsignedFromMemory(mib_addr, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib0")
         return
-    mib1 = get_process().ReadUnsignedFromMemory(rdi+4, 4, error)
+    mib1 = get_process().ReadUnsignedFromMemory(mib_addr+4, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib1")
         return
-    mib2 = get_process().ReadUnsignedFromMemory(rdi+8, 4, error)
+    mib2 = get_process().ReadUnsignedFromMemory(mib_addr+8, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib2")
         return
@@ -767,18 +774,22 @@ def antidebug_callback_step1(frame, bp_loc, dict):
     # so we need to verify on the return and remove the flag
     if mib0 == 1 and mib1 == 14 and mib2 == 1:
         print("[+] Hit sysctl antidebug request")
-        rdx = int(frame.FindRegister('rdx').GetValue(), 16)
-        if rdx == 0:
-            print("[!] warning: rdx == 0")
+        if is_x64():
+            reg_name = "rdx"
+        elif is_arm():
+            reg_name = "x2"
+        oldp_addr = int(frame.FindRegister(reg_name).GetValue(), 16)
+        if oldp_addr == 0:
+            print("[!] warning: oldp_addr == 0")
             get_process().Continue()
-        ANTIDEBUG_SYSCTL_OBJS.append(rdx)
+        ANTIDEBUG_SYSCTL_OBJS.append(oldp_addr)
         # set a temporary breakpoint on the ret
         # temporary because we can't sync this with other sysctl calls
         mem_sbaddr = lldb.SBAddress(int(frame.FindRegister('pc').GetValue(), 16), target)
         instructions_mem = target.ReadInstructions(mem_sbaddr, 64, "intel")
         for mem_inst in instructions_mem:
             #print(hex(mem_inst.addr.GetLoadAddress(target)), mem_inst.mnemonic)
-            if mem_inst.GetMnemonic(target) == 'ret':
+            if mem_inst.GetMnemonic(target).startswith('ret'):
                 breakpoint = target.BreakpointCreateByAddress(mem_inst.addr.GetLoadAddress(target))
                 breakpoint.SetOneShot(True)
                 breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
@@ -786,20 +797,69 @@ def antidebug_callback_step1(frame, bp_loc, dict):
     # everything automatic here so continue in any case
     get_process().Continue()
 
-def taskexception_callback(frame, bp_loc, dict):
+# def taskexception_callback(frame, bp_loc, dict):
+#     if frame is None:
+#         return 0
+#     print("[+] Hit task_set_exception_ports request")
+#     target = get_target()
+#     thread = frame.GetThread()
+#     # the SBValue to ReturnFromFrame must be eValueTypeRegister type
+#     # if we do a lldb.SBValue() we can't set to that type
+#     # so we need to make a copy
+#     # can we use FindRegister() from frame?
+#     return_value = frame.reg["rax"]
+#     return_value.value = str(0)
+#     thread.ReturnFromFrame(frame, return_value)
+#     #get_process().Continue()
+
+
+# Anti-debug implementation example
+# https://alexomara.com/blog/defeating-anti-debug-techniques-macos-ptrace-variants/
+def antidebug_ptrace_callback(frame, bp_loc, dict):
     if frame is None:
         return 0
-    print("[+] Hit task_set_exception_ports request")
-    target = get_target()
-    thread = frame.GetThread()
-    # the SBValue to ReturnFromFrame must be eValueTypeRegister type
-    # if we do a lldb.SBValue() we can't set to that type
-    # so we need to make a copy
-    # can we use FindRegister() from frame?
-    return_value = frame.reg["rax"]
-    return_value.value = str(0)
-    thread.ReturnFromFrame(frame, return_value)
-    #get_process().Continue()
+    if is_x64():
+        reg_name = "rdi"
+    elif is_arm():
+        reg_name = "x0"
+    request_val = int(frame.FindRegister(reg_name).GetValue(), 16)
+    # print("request_val: 0x{:x}".format(request_val))
+    if request_val == 0x1f:
+        print("[+] Hit ptrace antidebug request")
+        if is_x64():
+            reg_name = "rax"
+        elif is_arm():
+            reg_name = "x0"
+        error = lldb.SBError()
+        result = frame.registers[0].GetChildMemberWithName(reg_name).SetValueFromCString("0x0", error)
+        if not result:
+            print("[-] error: failed to write to {} register".format(reg_name))
+            return 0
+        get_thread().ReturnFromFrame(frame, frame.registers[0].GetChildMemberWithName(reg_name))
+    get_process().Continue()
+
+
+# Anti-debug implementation examples
+# https://alexomara.com/blog/defeating-anti-debug-techniques-macos-mach-exception-ports/
+# https://alexomara.com/blog/defeating-anti-debug-techniques-macos-mach-exception-port-stealing/
+def antidebug_task_exception_ports_callback(frame, bp_loc, dict):
+    if frame is None:
+        return 0
+    if is_x64():
+        reg_name = "rsi"
+    elif is_arm():
+        reg_name = "x1"
+    exception_mask = int(frame.FindRegister(reg_name).GetValue(), 16)
+    # print("exception_mask: 0x{:x}".format(exception_mask))
+    if exception_mask != 0x0:
+        print("[+] Hit {} antidebug request".format(get_frame().symbol.name))
+        error = lldb.SBError()
+        result = frame.registers[0].GetChildMemberWithName(reg_name).SetValueFromCString("0x0", error)
+        if not result:
+            print("[-] error: failed to write to {} register".format(reg_name))
+            return 0
+    get_process().Continue()
+
 
 def cmd_antidebug(debugger, command, result, dict):
     '''Enable anti-anti-debugging. Use \'antidebug help\' for more information.'''
@@ -816,7 +876,7 @@ Syntax: antidebug
         print(help)
         return
 
-    if is_arm():
+    if not is_x64() and not is_arm():
         print("[-] error: unsupported architecture for this command.")
         return
 
@@ -828,6 +888,12 @@ Syntax: antidebug
             breakpoint.SetScriptCallbackFunction('lldbinit.antidebug_callback_step1')
             #breakpoint2 = target.BreakpointCreateByName("task_set_exception_ports", '/usr/lib/system/libsystem_kernel.dylib')
             #breakpoint2.SetScriptCallbackFunction('lldbinit.taskexception_callback')
+            breakpoint3 = target.BreakpointCreateByName("ptrace", "/usr/lib/system/libsystem_kernel.dylib")
+            breakpoint3.SetScriptCallbackFunction("lldbinit.antidebug_ptrace_callback")
+            breakpoint4 = target.BreakpointCreateByName("task_get_exception_ports", "/usr/lib/system/libsystem_kernel.dylib")
+            breakpoint4.SetScriptCallbackFunction("lldbinit.antidebug_task_exception_ports_callback")
+            breakpoint5 = target.BreakpointCreateByName("task_set_exception_ports", "/usr/lib/system/libsystem_kernel.dylib")
+            breakpoint5.SetScriptCallbackFunction("lldbinit.antidebug_task_exception_ports_callback")
             break
 
 # the callback for the specific module loaded breakpoint
@@ -2066,10 +2132,10 @@ Syntax: crackcmd_noret <address> <register> <value>
             return
     elif is_i386():
         valid = [ "eip", "eax", "ebx", "ebp", "esp", "edi", "esi", "edx", "ecx" ]
-    if register not in valid:
+        if register not in valid:
             print("[-] error: invalid register for i386 architecture.")
-        print(help)
-        return
+            print(help)
+            return
 
     if value is None:
         print("[-] error: invalid value.")
