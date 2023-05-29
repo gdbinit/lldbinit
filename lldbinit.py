@@ -865,7 +865,7 @@ def cmd_antidebug(debugger, command, result, dict):
     '''Enable anti-anti-debugging. Use \'antidebug help\' for more information.'''
     help = """
 Enable anti-anti-debugging measures.
-Bypasses sysctl AmIBeingDebugged debugger detection.
+Bypasses sysctl/ptrace/task_get_exception_ports/task_set_exception_ports debugger detection.
 
 Syntax: antidebug
 """
