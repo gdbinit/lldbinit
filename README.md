@@ -34,7 +34,16 @@ Peter Nguyen maintains a [forked version](https://github.com/peternguyen93/lldbi
 
 [lisa.py](https://github.com/ant4g0nist/lisa.py) is also another good contender although focused on exploit dev.
 
-### What's new in version 3.x
+
+### What's new in version 3.1beta
+
+* Disassembly comments like [x64dbg](https://x64dbg.com) and breakpoint sessions (to save and restore breakpoints).
+
+* Bug fixes and small improvements.
+
+Check `MANUAL.md` for details about these new features. Please submit issues with any bugs and ideas/suggestions for these features. I tried to find the best balance but certain lldb constraints are annoying here.
+
+### What's new in version 3.0
 
 * Full arm64 (AArch64) support for most commands and displays.
 

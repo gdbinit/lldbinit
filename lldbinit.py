@@ -4,7 +4,7 @@
 | | | . | . | |   | |  _|
 |_|_|___|___|_|_|_|_|_|
 
-lldbinit v3.0
+lldbinit v3.1
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 Available at https://github.com/gdbinit/lldbinit
@@ -54,27 +54,9 @@ Notes:
 ------
 Version 3.0+ drops support for ARM32 and assumes ARM64 instead
 
-TODO:
------
-- shortcut to dump memory to file
-- check sbthread class: stepoveruntil for example
-- help for aliases
-- add source window?
-- add threads window?
-- command to search for symbol and display image address (image lookup -s symbol -v) (address is the range)
-- command to update breakpoints with new ASLR
-- solve addresses like lea    rsi, [rip + 0x38cf] (lldb does solve some stuff that it has symbols for and adds the info as comment)
-- swift support?
-- window for floating point/neon registers? off by default - they are huge in length so it might look crappy
-- exception state registers window?
+KNOWN BUGS:
+-----------
 
-BUGS:
------
-
-LLDB design:
-------------
-lldb -> debugger -> target -> process -> thread -> frame(s)
-                                      -> thread -> frame(s)
 '''
 
 if __name__ == "__main__":
@@ -91,6 +73,8 @@ import subprocess
 import tempfile
 import termios
 import fcntl
+import json
+import hashlib
 
 try:
     import keystone
@@ -99,8 +83,8 @@ except ImportError:
     CONFIG_KEYSTONE_AVAILABLE = 0
     pass
 
-VERSION = "3.0"
-BUILD = "347"
+VERSION = "3.1"
+BUILD = "376"
 
 #
 # User configurable options
@@ -184,6 +168,7 @@ if CONFIG_APPEARANCE == "light":
     COLOR_HEXDUMP_ADDR     = BLACK
     COLOR_HEXDUMP_DATA     = BLACK
     COLOR_HEXDUMP_ASCII    = BLACK
+    COLOR_COMMENT          = GREEN
 elif CONFIG_APPEARANCE == "dark":
     COLOR_REGVAL           = WHITE
     COLOR_REGNAME          = GREEN
@@ -199,6 +184,7 @@ elif CONFIG_APPEARANCE == "dark":
     COLOR_HEXDUMP_ADDR     = WHITE
     COLOR_HEXDUMP_DATA     = WHITE
     COLOR_HEXDUMP_ASCII    = WHITE
+    COLOR_COMMENT          = GREEN # XXX: test and change
 else:
     print("[-] Invalid CONFIG_APPEARANCE value.")
 
@@ -216,6 +202,9 @@ X64_BOTTOM_SIZE = 125
 ARM_TOP_SIZE = 102
 ARM_STACK_SIZE = ARM_TOP_SIZE - 1
 ARM_BOTTOM_SIZE = 108
+
+# turn on debugging output - you most probably don't need this
+DEBUG = 0
 
 #
 # Don't mess after here unless you know what you are doing!
@@ -243,6 +232,12 @@ int3patches = {}
 crack_cmds = []
 crack_cmds_noret = []
 modules_list = []
+
+g_current_target = ""
+g_target_hash = ""
+g_home = ""
+g_db = ""
+g_dbdata = {}
 
 # dyld modes
 dyld_mode_dict = { 
@@ -278,6 +273,10 @@ def __lldb_init_module(debugger, internal_dict):
     # don't load if we are in Xcode since it is not compatible and will block Xcode
     if os.getenv('PATH').startswith('/Applications/Xcode'):
         return
+
+    global g_home
+    if g_home == "":
+        g_home = os.getenv('HOME')
     
     res = lldb.SBCommandReturnObject()
     ci = debugger.GetCommandInterpreter()
@@ -292,164 +291,190 @@ def __lldb_init_module(debugger, internal_dict):
         ci.HandleCommand("settings set disassembly-format " + CUSTOM_DISASSEMBLY_FORMAT, res)
 
     # the hook that makes everything possible :-)
-    ci.HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget HandleHookStopOnTarget", res)
-    ci.HandleCommand("command script add -f lldbinit.HandleHookStopOnTarget context", res)
-    ci.HandleCommand("command alias ctx HandleHookStopOnTarget", res)
+    ci.HandleCommand("command script add -h '(lldbinit)' -f lldbinit.HandleProcessLaunchHook HandleProcessLaunchHook", res)
+    ci.HandleCommand("command script add -h '(lldbinit) The main lldbinit hook.' -f lldbinit.HandleHookStopOnTarget HandleHookStopOnTarget", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Display the current disassembly/CPU context.' -f lldbinit.HandleHookStopOnTarget context", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Alias to context command.' -- ctx HandleHookStopOnTarget", res)
     # commands
-    ci.HandleCommand("command script add -f lldbinit.cmd_lldbinitcmds lldbinitcmds", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_IphoneConnect iphone", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Print list of available commands.' -f lldbinit.cmd_lldbinitcmds lldbinitcmds", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Connect to debugserver running on iPhone.' -f lldbinit.cmd_IphoneConnect iphone", res)
+    #
+    # comments commands
+    #
+    ci.HandleCommand("command script add -h '(lldbinit) Add disassembly comment.' -f lldbinit.cmd_addcomment acm", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Remove disassembly comment.' -f lldbinit.cmd_delcomment dcm", res)
+    ci.HandleCommand("command script add -h '(lldbinit) List disassembly comments.' -f lldbinit.cmd_listcomments lcm", res)
+    # fuck the nazis :-)
+    # save session, restore session, list session commands
+    ci.HandleCommand("command script add -h '(lldbinit) Save breakpoint session.' -f lldbinit.cmd_save_session ss", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Restore breakpoint session.' -f lldbinit.cmd_restore_session rs", res)
+    ci.HandleCommand("command script add -h '(lldbinit) List breakpoint sessions.' -f lldbinit.cmd_list_sessions ls", res)
     #
     # dump memory commands
     #
-    ci.HandleCommand("command script add -f lldbinit.cmd_db db", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_dw dw", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_dd dd", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_dq dq", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_DumpInstructions u", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_findmem findmem", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_showregions showregions", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Memory hex dump in byte format.' -f lldbinit.cmd_db db", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Memory hex dump in word format.' -f lldbinit.cmd_dw dw", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Memory hex dump in double word format.' -f lldbinit.cmd_dd dd", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Memory hex dump in quad word format.' -f lldbinit.cmd_dq dq", res)
+    # XXX: fix help
+    ci.HandleCommand("command script add -h '(lldbinit) Disassemble instructions at address.' -f lldbinit.cmd_DumpInstructions u", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Memory search.' -f lldbinit.cmd_findmem findmem", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Display process memory regions.' -f lldbinit.cmd_showregions showregions", res)
     #
     # Settings related commands
     #
-    ci.HandleCommand("command script add -f lldbinit.cmd_enable enable", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_disable disable", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_contextcodesize contextcodesize", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Configure lldb and lldbinit options.' -f lldbinit.cmd_enable enable", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Configure lldb and lldbinit options.' -f lldbinit.cmd_disable disable", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set number of instruction lines in code window.' -f lldbinit.cmd_contextcodesize contextcodesize", res)
     # a few settings aliases
-    ci.HandleCommand("command alias enablesolib enable solib", res)
-    ci.HandleCommand("command alias disablesolib disable solib", res)
-    ci.HandleCommand("command alias enableaslr enable aslr", res)
-    ci.HandleCommand("command alias disableaslr disable aslr", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Enable the stop on library load events.' -- enablesolib enable solib", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Disable the stop on library load events.' -- disablesolib disable solib", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Enable target ASLR.' -- enableaslr enable aslr", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Disable target ASLR.' -- disableaslr disable aslr", res)
     #
     # Breakpoint related commands
     #
-    ci.HandleCommand("command script add -f lldbinit.cmd_bhb bhb", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bht bht", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpt bpt", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpn bpn", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bm bm", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bmc bmc", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_antidebug antidebug", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_print_notifier_images print_images", res)
+    # replace the default alias with our own version
+    ci.HandleCommand("command unalias b", res)
+    # software breakpoints
+    ci.HandleCommand("command script add -h '(lldbinit) Set a software breakpoint.' -f lldbinit.cmd_bp b", res)
+    # alias "bp" command that exists in gdbinit
+    ci.HandleCommand("command alias -h '(lldbinit) Alias to b.' -- bp b", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set a temporary software breakpoint.' -f lldbinit.cmd_bpt bpt", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set a temporary breakpoint on next instruction.' -f lldbinit.cmd_bpn bpn", res)
+    # hardware breakpoints
+    ci.HandleCommand("command script add -h '(lldbinit) Set an hardware breakpoint.' -f lldbinit.cmd_bh bh", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set a temporary hardware breakpoint.' -f lldbinit.cmd_bht bht", res)
+    # module breakpoints
+    ci.HandleCommand("command script add -h '(lldbinit) Breakpoint on module load.' -f lldbinit.cmd_bm bm", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Clear all module load breakpoints.' -f lldbinit.cmd_bmc bmc", res)
+    ci.HandleCommand("command script add -h '(lldbinit) List all on module load breakpoints.' -f lldbinit.cmd_bml bml", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Enable anti-anti-debugging measures.' -f lldbinit.cmd_antidebug antidebug", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Print all images available at gdb_image_notifier() breakpoint.' -f lldbinit.cmd_print_notifier_images print_images", res)
     # disable a breakpoint or all
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpd bpd", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpda bpda", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Disable a breakpoint.' -f lldbinit.cmd_bpd bpd", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Disable all breakpoints.' -f lldbinit.cmd_bpda bpda", res)
     # clear a breakpoint or all
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpc bpc", res)
-    ci.HandleCommand("command alias bpca breakpoint delete", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Clear a breakpoint.' -f lldbinit.cmd_bpc bpc", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Clear all breakpoints' -- bpca breakpoint delete", res)
     # enable a breakpoint or all
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpe bpe", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_bpea bpea", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Enable a breakpoint.' -f lldbinit.cmd_bpe bpe", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Enable all breakpoints.' -f lldbinit.cmd_bpea bpea", res)
     # commands to set temporary int3 patches and restore original bytes
-    ci.HandleCommand("command script add -f lldbinit.cmd_int3 int3", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_rint3 rint3", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_listint3 listint3", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_nop nop", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_null null", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Patch memory address with INT3.' -f lldbinit.cmd_int3 int3", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Restore original byte at address patched with INT3.' -f lldbinit.cmd_rint3 rint3", res)
+    ci.HandleCommand("command script add -h '(lldbinit) List all INT3 patched addresses.' -f lldbinit.cmd_listint3 listint3", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Patch memory address with NOP.' -f lldbinit.cmd_nop nop", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Patch memory address with NULL.' -f lldbinit.cmd_null null", res)
     # change eflags commands
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfa cfa", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfc cfc", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfd cfd", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfi cfi", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfo cfo", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfp cfp", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfs cfs", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cft cft", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfz cfz", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change adjust CPU flag.' -f lldbinit.cmd_cfa cfa", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change carry CPU flag.' -f lldbinit.cmd_cfc cfc", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change direction CPU flag.' -f lldbinit.cmd_cfd cfd", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change interrupt CPU flag.' -f lldbinit.cmd_cfi cfi", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change overflow CPU flag.' -f lldbinit.cmd_cfo cfo", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change parity CPU flag.' -f lldbinit.cmd_cfp cfp", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change sign CPU flag.' -f lldbinit.cmd_cfs cfs", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change trap CPU flag.' -f lldbinit.cmd_cft cft", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change zero CPU flag.' -f lldbinit.cmd_cfz cfz", res)
     # change NZCV flags - exclusive commands to AArch64 (Z, C are common)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfn cfn", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_cfv cfv", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change negative CPU flag.' -f lldbinit.cmd_cfn cfn", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Change overflow CPU flag.' -f lldbinit.cmd_cfv cfv", res)
     # skip/step current instruction commands
-    ci.HandleCommand("command script add -f lldbinit.cmd_skip skip", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_stepo stepo", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Skip current instruction.' -f lldbinit.cmd_skip skip", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Step over calls and loop instructions.' -f lldbinit.cmd_stepo stepo", res)
     # load breakpoints from file
-    ci.HandleCommand("command script add -f lldbinit.cmd_LoadBreakPoints lb", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Load breakpoints from file.' -f lldbinit.cmd_LoadBreakPoints lb", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Load breakpoints from file.' -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
     # cracking friends
-    ci.HandleCommand("command script add -f lldbinit.cmd_crack crack", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_crackcmd crackcmd", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_crackcmd_noret crackcmd_noret", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Return from current function.' -f lldbinit.cmd_crack crack", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set a breakpoint and return from that function.' -f lldbinit.cmd_crackcmd crackcmd", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set a breakpoint and set a register value. doesn't return from function.' -f lldbinit.cmd_crackcmd_noret crackcmd_noret", res)
     # alias for existing breakpoint commands
     # list all breakpoints
-    ci.HandleCommand("command alias bpl breakpoint list", res)
-    # alias "bp" command that exists in gdbinit - lldb also has alias for "b"
-    ci.HandleCommand("command alias bp _regexp-break", res)
+    ci.HandleCommand("command script add -h '(lldbinit) List breakpoints.' -f lldbinit.cmd_bpl bpl", res)
     # to set breakpoint commands - I hate typing too much
-    ci.HandleCommand("command alias bcmd breakpoint command add", res)
+    ci.HandleCommand("command alias -h '(lldbinit) breakpoint command add alias.' -- bcmd breakpoint command add", res)
     # launch process and stop at entrypoint (not exactly as gdb command that just inserts breakpoint)
+    # replace the default run alias with our version
+    ci.HandleCommand("command unalias r", res)
+    ci.HandleCommand("command unalias run", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Start the target and stop at entrypoint.' -f lldbinit.cmd_run r", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Start the target and stop at entrypoint.' -- run r", res)
+
     # usually it will be inside dyld and not the target main()
-    ci.HandleCommand("command alias break_entrypoint process launch --stop-at-entry", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_show_loadcmds show_loadcmds", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_show_header show_header", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_tester tester", res)
-    ci.HandleCommand("command script add -f lldbinit.cmd_datawin datawin", res)
+    ci.HandleCommand("command alias -h '(lldbinit) Start target and stop at entrypoint.' -- break_entrypoint process launch --stop-at-entry", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Show otool output of Mach-O load commands.' -f lldbinit.cmd_show_loadcmds show_loadcmds", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Show otool output of Mach-O header.' -f lldbinit.cmd_show_header show_header", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Test function - do not use :-).' -f lldbinit.cmd_tester tester", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Set start address to display on data window.' -f lldbinit.cmd_datawin datawin", res)
     # used mostly for aliases below but can be called as other commands
-    ci.HandleCommand("command script add -f lldbinit.cmd_update_register update_register", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Update register function to be used by all the register alias.' -f lldbinit.cmd_update_register update_register", res)
     # shortcut command to modify registers content
     if CONFIG_ENABLE_REGISTER_SHORTCUTS == 1:
         # x64
-        ci.HandleCommand("command alias rip update_register rip", res)
-        ci.HandleCommand("command alias rax update_register rax", res)
-        ci.HandleCommand("command alias rbx update_register rbx", res)
-        ci.HandleCommand("command alias rbp update_register rbp", res)
-        ci.HandleCommand("command alias rsp update_register rsp", res)
-        ci.HandleCommand("command alias rdi update_register rdi", res)
-        ci.HandleCommand("command alias rsi update_register rsi", res)
-        ci.HandleCommand("command alias rdx update_register rdx", res)
-        ci.HandleCommand("command alias rcx update_register rcx", res)
-        ci.HandleCommand("command alias r8 update_register r8", res)
-        ci.HandleCommand("command alias r9 update_register r9", res)
-        ci.HandleCommand("command alias r10 update_register r10", res)
-        ci.HandleCommand("command alias r11 update_register r11", res)
-        ci.HandleCommand("command alias r12 update_register r12", res)
-        ci.HandleCommand("command alias r13 update_register r13", res)
-        ci.HandleCommand("command alias r14 update_register r14", res)
-        ci.HandleCommand("command alias r15 update_register r15", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RIP register.' -- rip update_register rip", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RAX register.' -- rax update_register rax", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RBX register.' -- rbx update_register rbx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RBP register.' -- rbp update_register rbp", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RSP register.' -- rsp update_register rsp", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RDI register.' -- rdi update_register rdi", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RSI register.' -- rsi update_register rsi", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RDX register.' -- rdx update_register rdx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update RCX register.' -- rcx update_register rcx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R8 register.' -- r8 update_register r8", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R9 register.' -- r9 update_register r9", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R10 register.' -- r10 update_register r10", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R11 register.' -- r11 update_register r11", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R12 register.' -- r12 update_register r12", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R13 register.' -- r13 update_register r13", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R14 register.' -- r14 update_register r14", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update R15 register.' -- r15 update_register r15", res)
         # x86
-        ci.HandleCommand("command alias eip update_register eip", res)
-        ci.HandleCommand("command alias eax update_register eax", res)
-        ci.HandleCommand("command alias ebx update_register ebx", res)
-        ci.HandleCommand("command alias ebp update_register ebp", res)
-        ci.HandleCommand("command alias esp update_register esp", res)
-        ci.HandleCommand("command alias edi update_register edi", res)
-        ci.HandleCommand("command alias esi update_register esi", res)
-        ci.HandleCommand("command alias edx update_register edx", res)
-        ci.HandleCommand("command alias ecx update_register ecx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EIP register.' -- eip update_register eip", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EAX register.' -- eax update_register eax", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EBX register.' -- ebx update_register ebx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EBP register.' -- ebp update_register ebp", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update ESP register.' -- esp update_register esp", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EDI register.' -- edi update_register edi", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update ESI register.' -- esi update_register esi", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update EDX register.' -- edx update_register edx", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update ECX register.' -- ecx update_register ecx", res)
         # ARM64
-        ci.HandleCommand("command alias x0 update_register x0", res)
-        ci.HandleCommand("command alias x1 update_register x1", res)
-        ci.HandleCommand("command alias x2 update_register x2", res)
-        ci.HandleCommand("command alias x3 update_register x3", res)
-        ci.HandleCommand("command alias x4 update_register x4", res)
-        ci.HandleCommand("command alias x5 update_register x5", res)
-        ci.HandleCommand("command alias x6 update_register x6", res)
-        ci.HandleCommand("command alias x7 update_register x7", res)
-        ci.HandleCommand("command alias x8 update_register x8", res)
-        ci.HandleCommand("command alias x9 update_register x9", res)
-        ci.HandleCommand("command alias x10 update_register x10", res)
-        ci.HandleCommand("command alias x11 update_register x11", res)
-        ci.HandleCommand("command alias x12 update_register x12", res)
-        ci.HandleCommand("command alias x13 update_register x13", res)
-        ci.HandleCommand("command alias x14 update_register x14", res)
-        ci.HandleCommand("command alias x15 update_register x15", res)
-        ci.HandleCommand("command alias x16 update_register x16", res)
-        ci.HandleCommand("command alias x17 update_register x17", res)
-        ci.HandleCommand("command alias x18 update_register x18", res)
-        ci.HandleCommand("command alias x19 update_register x19", res)
-        ci.HandleCommand("command alias x20 update_register x20", res)
-        ci.HandleCommand("command alias x21 update_register x21", res)
-        ci.HandleCommand("command alias x22 update_register x22", res)
-        ci.HandleCommand("command alias x23 update_register x23", res)
-        ci.HandleCommand("command alias x24 update_register x24", res)
-        ci.HandleCommand("command alias x25 update_register x25", res)
-        ci.HandleCommand("command alias x26 update_register x26", res)
-        ci.HandleCommand("command alias x27 update_register x27", res)
-        ci.HandleCommand("command alias x28 update_register x28", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X0 register.' -- x0 update_register x0", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X1 register.' -- x1 update_register x1", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X2 register.' -- x2 update_register x2", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X3 register.' -- x3 update_register x3", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X4 register.' -- x4 update_register x4", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X5 register.' -- x5 update_register x5", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X6 register.' -- x6 update_register x6", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X7 register.' -- x7 update_register x7", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X8 register.' -- x8 update_register x8", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X9 register.' -- x9 update_register x9", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X10 register.' -- x10 update_register x10", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X11 register.' -- x11 update_register x11", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X12 register.' -- x12 update_register x12", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X13 register.' -- x13 update_register x13", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X14 register.' -- x14 update_register x14", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X15 register.' -- x15 update_register x15", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X16 register.' -- x16 update_register x16", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X17 register.' -- x17 update_register x17", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X18 register.' -- x18 update_register x18", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X19 register.' -- x19 update_register x19", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X20 register.' -- x20 update_register x20", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X21 register.' -- x21 update_register x21", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X22 register.' -- x22 update_register x22", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X23 register.' -- x23 update_register x23", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X24 register.' -- x24 update_register x24", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X25 register.' -- x25 update_register x25", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X26 register.' -- x26 update_register x26", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X27 register.' -- x27 update_register x27", res)
+        ci.HandleCommand("command alias -h '(lldbinit) Update X28 register.' -- x28 update_register x28", res)
     if CONFIG_KEYSTONE_AVAILABLE == 1:
-        ci.HandleCommand("command script add -f lldbinit.cmd_asm32 asm32", res)
-        ci.HandleCommand("command script add -f lldbinit.cmd_asm64 asm64", res)
-        ci.HandleCommand("command script add -f lldbinit.cmd_arm32 arm32", res)
-        ci.HandleCommand("command script add -f lldbinit.cmd_arm64 arm64", res)
-        ci.HandleCommand("command script add -f lldbinit.cmd_armthumb armthumb", res)
+        ci.HandleCommand("command script add -h '(lldbinit) 32 bit x86 interactive Keystone based assembler.' -f lldbinit.cmd_asm32 asm32", res)
+        ci.HandleCommand("command script add -h '(lldbinit) 64 bit x86 interactive Keystone based assembler.' -f lldbinit.cmd_asm64 asm64", res)
+        ci.HandleCommand("command script add -h '(lldbinit) 32 bit ARM interactive Keystone based assembler.' -f lldbinit.cmd_arm32 arm32", res)
+        ci.HandleCommand("command script add -h '(lldbinit) 64 bit ARM interactive Keystone based assembler.' -f lldbinit.cmd_arm64 arm64", res)
+        ci.HandleCommand("command script add -h '(lldbinit) 32 bit ARM Thumb interactive Keystone based assembler.' -f lldbinit.cmd_armthumb armthumb", res)
     # add the hook - we don't need to wait for a target to be loaded
     # Note: since I removed the original stop-disassembly-count trick to allegedly avoid
     # double loading it had a side effect to keep adding multiple copies of the hook
@@ -457,14 +482,17 @@ def __lldb_init_module(debugger, internal_dict):
     # a check is now implemented where the hook is only added if no previous hook exist
     ci.HandleCommand("target stop-hook list", res)
     if res.Succeeded():
+        # XXX: older lldb crashes if we set the -s option...
+        # if "HandleProcessLaunchHook" not in res.GetOutput():
+        #     ci.HandleCommand("target stop-hook add -n _dyld_start -s /usr/lib/dyld -o 'HandleProcessLaunchHook'", res)
         if "HandleHookStopOnTarget" not in res.GetOutput():
             ci.HandleCommand("target stop-hook add -o 'HandleHookStopOnTarget'", res)
     else:
         print("[-] error: failed to list stop hooks and our hook isn't loaded")
 
-    ci.HandleCommand("command script add --function lldbinit.cmd_banner banner", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Display lldbinit banner.' --function lldbinit.cmd_banner banner", res)
     # custom commands
-    ci.HandleCommand("command script add -f lldbinit.cmd_fixret fixret", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Fix return breakpoint.' -f lldbinit.cmd_fixret fixret", res)
     # displays the version banner when lldb is loaded
     debugger.HandleCommand("banner")
     return
@@ -489,7 +517,8 @@ def cmd_lldbinitcmds(debugger, command, result, dict):
     [ "----[ Breakpoints ]----", ""],
     [ "b", "breakpoint address" ],
     [ "bpt", "set a temporary software breakpoint" ],
-    [ "bhb", "set an hardware breakpoint" ],
+    [ "bh", "set an hardware breakpoint" ],
+    [ "bht", "set a temporary hardware breakpoint" ],
     [ "bpc", "clear breakpoint" ],
     [ "bpca", "clear all breakpoints" ],
     [ "bpd", "disable breakpoint" ],
@@ -499,8 +528,9 @@ def cmd_lldbinitcmds(debugger, command, result, dict):
     [ "bcmd", "alias to breakpoint command add"],
     [ "bpl", "list all breakpoints"],
     [ "bpn", "temporarly breakpoint next instruction" ],
-    [ "bm", "breakpoint on specific module load" ],
+    [ "bm", "breakpoint on module load" ],
     [ "bmc", "clear all module load breakpoints" ],
+    [ "bml", "list all on module load breakpoints" ],
     [ "break_entrypoint", "launch target and stop at entrypoint" ],
     [ "skip", "skip current instruction" ],
     [ "int3", "patch memory address with INT3" ],
@@ -521,6 +551,9 @@ def cmd_lldbinitcmds(debugger, command, result, dict):
     [ "u", "dump instructions" ],
     [ "ctx/context", "show current instruction pointer CPU context" ],
     [ "stepo", "step over calls and loop instructions" ],
+    [ "acm", "add disassembly comment" ],
+    [ "dcm", "remove disassembly comment" ],
+    [ "lcm", "list disassembly comments" ],
 
     [ "----[ Registers and CPU Flags ]----", ""],
     [ "rip/rax/rbx/etc", "shortcuts to modify x64 registers" ],
@@ -923,7 +956,7 @@ def module_breakpoint_callback(frame, bp_loc, dict):
         if not error.Success():
             print("[-] error: failed to read module name string.")
             return
-
+        # XXX: convert this to dictionary? we expect this to be always quite small (one or just a few entries)
         for i in modules_list:
             if i == string:
                 hit = 1
@@ -964,10 +997,10 @@ bm /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation
         print(help)
         return
 
-    # cmd is a list so we have problems in paths with spaces
     # convert everything to a single string
-    # and hope the user doesn't make an error such as: bm path with spaces junk
-    modpath = command.split(" ", 0)
+    # spaces should be fine on the path without escaping since we expect them like that in memory
+    # when matching the modules at the callback
+    modpath = ' '.join([str(item) for item in cmd[0:]])
 
     found = 0
     target = get_target()
@@ -993,14 +1026,16 @@ bm /System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation
                         # we need to iterate all locations of each breakpoint... geezzzzzz
                         for bl in bpt:
                             if bl.GetLoadAddress() ==  bpt_addr:
-                                modules_list.append(modpath[0])
+                                print("[+] Added \'{}\' to breakpoint on module load.".format(modpath))
+                                modules_list.append(modpath)
                                 return
                     print("[+] setting breakpoint on gdb_image_notifier located at address {0}".format(hex(saddr.GetLoadAddress(target))))
                     breakpoint = target.BreakpointCreateByAddress(bpt_addr)
                     # append the module name to the list if set
                     if len(cmd) > 0:
                         breakpoint.SetScriptCallbackFunction('lldbinit.module_breakpoint_callback')
-                        modules_list.append(modpath[0])
+                        print("[+] Added \'{}\' to breakpoint on module load.".format(modpath))
+                        modules_list.append(modpath)
                     found = 1
                     break
         if found:
@@ -1020,8 +1055,22 @@ Syntax: bmc
         return
     modules_list = []
 
+def cmd_bml(debugger, command, result, dict):
+    '''List all breakpoints on module load.'''
+    help = """
+List all breakpoints on module load.
+
+Syntax: bml
+"""
+    if len(modules_list) == 0:
+        print("No breakpoints on modules currently set.")
+        return
+    print("Breakpoints on modules:")
+    for i in modules_list:
+        print("- " + i)
+
 def cmd_print_notifier_images(debugger, command, result, dict):
-    '''Print all images available at gdb_image_notifier/lldb_image_notifier breakpoint'''
+    '''Print all images available at gdb_image_notifier/lldb_image_notifier breakpoint.'''
     help = """
 Print all images available at gdb_image_notifier() or lldb_image_notifier() breakpoint.
 Only valid when breakpoint set at beginning of the image notifier.
@@ -1103,9 +1152,12 @@ Syntax: print_images
         readSize = 8
         dyld_image_info_size = 8 * 3
 
-    print("[+] gdb_image_notifier total dyld_image_info images: {0}".format(infoCount))
-    print("[+] mode: {0} ({1})".format(mode, dyld_mode_dict[mode]))
-    print("[+] Loaded modules:")
+    print("gdb_image_notifier available dyld_image_info images: {0}".format(infoCount))
+    if infoCount == 0:
+        return
+    print("Mode: {0} ({1})".format(mode, dyld_mode_dict[mode]))
+    print("Loaded modules:")
+    print("----------------------------------------------------------")
     for x in range(infoCount):
         address = get_process().ReadUnsignedFromMemory(info, readSize, error)
         if not error.Success():
@@ -1119,9 +1171,57 @@ Syntax: print_images
         if not error.Success():
             print("[-] error: failed to read module name string.")
             return
-        print("{0} @ {1}".format(string, hex(address)))
+        print("0x{:>014x} | {:s}".format(address, string))
         # advance to next one sizeof(struct dyld_image_info)
         info += dyld_image_info_size
+
+# software breakpoint
+# overwrites the default alias
+# XXX: should we verify duplicate breakpoints?
+# they should exist, for example one with condition another without
+# and user can enable/disable the one he wants to work with
+#
+# NOTE: this is straighforward breakpoint without conditions etc
+# user can always set conditions via regular commands
+def cmd_bp(debugger, command, result, dict):
+    '''Set a software breakpoint.'''
+    help = """
+Set a software breakpoint.
+
+Syntax: b <address> [breakpoint name]
+
+Note: breakpoint name must *not* use spaces
+"""
+
+    cmd = command.split()
+    if len(cmd) < 1:
+        print("[-] error: please insert a breakpoint address.")
+        print("")
+        print(help)
+        return
+    if cmd[0] == "help":
+        print(help)
+        return
+
+    value = evaluate(cmd[0])
+    if value is None:
+        print("[-] error: invalid input value.")
+        print("")
+        print(help)
+        return
+    
+    name = ""
+    if len(cmd) > 1:
+        name = cmd[1]
+
+    res = lldb.SBCommandReturnObject()
+    if name != "":
+        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -a {} -N {}".format(hex(value), name), res)
+    else:
+        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -a {}".format(hex(value)), res)
+
+    print("[+] Software breakpoint set at 0x{:x}".format(value))
+    return
 
 # temporary software breakpoint
 def cmd_bpt(debugger, command, result, dict):
@@ -1159,18 +1259,19 @@ Note: expressions are supported, do not use spaces between operators.
     print("[+] Set temporary breakpoint at 0x{:x}".format(value))
 
 # hardware breakpoint
-def cmd_bhb(debugger, command, result, dict):
-    '''Set an hardware breakpoint'''
+def cmd_bh(debugger, command, result, dict):
+    '''Set an hardware breakpoint.'''
     help = """
 Set an hardware breakpoint.
 
-Syntax: bhb <address>
+Syntax: bh <address> [breakpoint name]
 
 Note: expressions are supported, do not use spaces between operators.
+Note: breakpoint name must *not* use spaces
 """
 
     cmd = command.split()
-    if len(cmd) != 1:
+    if len(cmd) < 1:
         print("[-] error: please insert a breakpoint address.")
         print("")
         print(help)
@@ -1186,17 +1287,24 @@ Note: expressions are supported, do not use spaces between operators.
         print(help)
         return
 
+    name = ""
+    if len(cmd) > 1:
+        name = cmd[1]
+
+    res = lldb.SBCommandReturnObject()
     # the python API doesn't seem to support hardware breakpoints
     # so we set it via command line interpreter
-    res = lldb.SBCommandReturnObject()
-    lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H -a " + hex(value), res)
+    if name != "":
+        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H -a {} -N {}".format(hex(value), name), res)
+    else:
+        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H -a {}".format(hex(value)), res)
 
     print("[+] Hardware breakpoint set at 0x{:x}".format(value))
     return
 
 # temporary hardware breakpoint
 def cmd_bht(debugger, command, result, dict):
-    '''Set a temporary hardware breakpoint'''
+    '''Set a temporary hardware breakpoint.'''
     print("[-] error: lldb has no x86/x64 temporary hardware breakpoints implementation.")
     return
 
@@ -1372,6 +1480,76 @@ Syntax: bpea
         print("[-] error: failed to enable all breakpoints.")
 
     print("[+] Enabled all breakpoints.")
+
+# list all breakpoints
+def cmd_bpl(debugger, command, result, dict):
+    '''List all breakpoints. Use \'bpl help\' for more information.'''
+    help = """
+List all breakpoints.
+
+Syntax: bpl
+"""
+
+    cmd = command.split()
+    if len(cmd) != 0:
+        if cmd[0] == "help":
+           print(help)
+           return
+        print("[-] error: command doesn't take any arguments.")
+        print("")
+        print(help)
+        return
+
+    target = get_target()
+    # nothing to present
+    if target.num_breakpoints == 0:
+        print("No breakpoints currently set.")
+        return
+    
+    print("{:<4} {: <18} {} {} {: <24} {}".format("#", "Address", "Enabled", "Count", "Module", "Name"))
+    print("--------------------------------------------------------------------------------")
+    # the live version should be equal to the disk version since we write to database after every op
+    count = 1
+    for bpt in target.breakpoint_iter():
+        # XXX: we assume always the first location
+        item = bpt.location[0]
+        # XXX: display bad addresses? more checks, more problems to deal with
+        if item is None:
+            continue
+        bp_addr = item.GetLoadAddress()
+        # set module binary if resolved
+        binary = "Unresolved breakpoint"
+        iaddr = item.GetAddress()
+        fullpath = iaddr.module.file.fullpath
+        path = fullpath
+        if fullpath is not None:
+            path = os.path.abspath(fullpath)
+        if path is not None:
+            binary = os.path.basename(path)
+        # set the enabled flag
+        enabled = "Y"
+        if bpt.IsEnabled() is False:
+            enabled = "N"
+        # set temporary breakpoint flag
+        temp = ""
+        if bpt.IsOneShot():
+            temp = "*"
+        # there are no temporary hardware breakpoints so we reuse the field
+        # this function not available in older lldb versions
+        try:
+            if bpt.IsHardware():
+                temp = "+"
+        except:
+            pass
+        # retrieve the first breakpoint name if set
+        # only the first name supported
+        name = ""
+        names = lldb.SBStringList()
+        bpt.GetNames(names)
+        if names.IsValid():
+            name = names.GetStringAtIndex(0)
+        print("{:<3} {:1}{: <18} {:^7s} {:^5d} {: <24} {}".format(count, temp,hex(bp_addr), enabled, bpt.GetHitCount(), binary, name))
+        count += 1
 
 # skip current instruction - just advances PC to next instruction but doesn't execute it
 def cmd_skip(debugger, command, result, dict):
@@ -1720,7 +1898,7 @@ Notes:
     Implements stepover instruction.
 '''
 def cmd_stepo(debugger, command, result, dict):
-    '''Step over calls and some other instructions so we don't need to step into them. Use \'stepo help\' for more information.'''
+    """Step over calls and some other instructions so we don't need to step into them. Use \'stepo help\' for more information."""
     help = """
 Step over calls and loops that we want executed but not step into.
 Affected instructions: 
@@ -2537,7 +2715,7 @@ def quotechars( chars ):
 # find memory command - lldb has 'memory find' but requires a start and end address where to search
 # this version will seek in all available process memory regions
 def cmd_findmem(debugger, command, result, dict):
-    '''Search memory'''
+    '''Search memory.'''
     help = """
 [options]
  -s searches for specified string
@@ -2690,7 +2868,7 @@ def cmd_findmem(debugger, command, result, dict):
 # display information about process memory regions similar to vmmap
 # contains less information in particular the type of memory region
 def cmd_showregions(debugger, command, result, dict):
-    '''Display memory regions information'''
+    '''Display memory regions information.'''
     help = """
 Display memory regions similar to vmmap (but with less information)
 
@@ -3083,7 +3261,7 @@ Syntax: cfn
         return
     modify_cpsr("N")
 
-# AArch NZCV registger overflow bit
+# AArch NZCV register overflow bit
 def cmd_cfv(debugger, command, result, dict):
     '''Change overflow flag. Use \'cfv help\' for more information.'''
     help = """
@@ -3776,7 +3954,7 @@ def print_registers():
 '''
 # XXX: help
 def cmd_DumpInstructions(debugger, command, result, dict):
-    '''Dump instructions at certain address (SoftICE like u command style)'''
+    '''Dump instructions at certain address (SoftICE like u command style).'''
     help = """ """
 
     global GlobalListOutput
@@ -3910,6 +4088,8 @@ def disassemble(start_address, nrlines):
     module = file_sbaddr.module
     #module_name = module.file.GetFilename()
     module_name = module.file.fullpath
+    if module_name is not None:
+        module_name = os.path.abspath(module_name)
 
     count = 0
     blockstart_symaddr = None
@@ -3976,10 +4156,28 @@ def disassemble(start_address, nrlines):
         file_addr = file_inst.addr.GetFileAddress()
 
         comment = ""
+        # start at lldb automatic comments, if available
         if file_inst.GetComment(target) != "":
             comment = " ; " + file_inst.GetComment(target)
+        
+        # retrieve the base address of the module where the address belongs to
+        # the comments offsets are relative to this
+        # it's ok to use the module variable we got from file_sbaddr
+        inst_base = get_module_base(module)
+        user_comment = ""
+        if inst_base > 0 and g_dbdata != {}:
+            # not the most efficient way to do this but converting to hash table is going to increase complexity
+            # for almost no benefit speed wise (unless the number of comments is huge)
+            mod_uuid = str(mem_inst.addr.module.uuid)
+            for k in g_dbdata["comments"]:
+                i = int(k["offset"], 16)
+                if ( k["uuid"] == mod_uuid ) and ( i + inst_base == memory_addr ):
+                    user_comment = COLOR_COMMENT + k["text"] + RESET
+                    break
 
+        header = 0
         if current_pc == memory_addr:
+            header = 1
             # try to retrieve extra information if it's a branch instruction
             # used to resolve indirect branches and try to extract Objective-C selectors
             if mem_inst.DoesBranch():
@@ -4001,7 +4199,7 @@ def disassemble(start_address, nrlines):
                         else:
                             comment = " ; " + symbol_info + hex(flow_addr) + " @ " + flow_module_name
                     else:
-                        comment = comment + " " + hex(flow_addr) + " @ " + flow_module_name
+                        comment += " " + hex(flow_addr) + " @ " + flow_module_name
                 # for arm64 targets there is a branch to a subroutine that does the real call to the objc_msgSend
                 # and the selector string is there - the symbol name does contain the name
                 # so we can either extract it from here or read the information from the subroutine
@@ -4012,9 +4210,18 @@ def disassemble(start_address, nrlines):
                         comment += " -> " + "[" + className + " " + selectorName + "]"
                     else:
                         comment += " -> " + "[" + className + "]"
-            output(COLOR_CURRENT_PC + "->  0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n" + RESET)
+        
+        # append or set user comment
+        if user_comment != "":
+            if comment != "":
+                comment += " " + user_comment
+            else:
+                comment = " ; " + user_comment
+        # first line is different from the rest
+        if header:
+            output(COLOR_CURRENT_PC + "->  0x{:x} (0x{:x}): {}  {}   {}{:s}\n".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + RESET)
         else:
-            output("    0x{:x} (0x{:x}): {}  {}   {}{}".format(memory_addr, file_addr, bytes_string, mnem, operands, comment) + "\n")
+            output("    0x{:x} (0x{:x}): {}  {}   {}{:s}\n".format(memory_addr, file_addr, bytes_string, mnem, operands, comment))
 
         count += 1
 
@@ -4315,7 +4522,7 @@ Requires Keystone and Python bindings from www.keystone-engine.org.
 
 # XXX: help
 def cmd_IphoneConnect(debugger, command, result, dict): 
-    '''Connect to debugserver running on iPhone'''
+    '''Connect to debugserver running on iPhone.'''
     help = """ """
     global GlobalListOutput
     GlobalListOutput = []
@@ -4348,7 +4555,7 @@ def cmd_IphoneConnect(debugger, command, result, dict):
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 def display_stack():
-    '''Hex dump current stack pointer'''
+    '''Hex dump current stack pointer.'''
     stack_addr = get_current_sp()
     if stack_addr == 0:
         return
@@ -4364,7 +4571,7 @@ def display_stack():
     output(hexdump(stack_addr, membuf, " ", 16, 4))
 
 def display_data():
-    '''Hex dump current data window pointer'''
+    '''Hex dump current data window pointer.'''
     data_addr = DATA_WINDOW_ADDRESS
     print(data_addr)
     if data_addr == 0:
@@ -4462,6 +4669,7 @@ def get_indirect_flow_target(src_address):
             # says it's 47 bits for macOS
             # https://googleprojectzero.blogspot.com/2019/02/examining-pointer-authentication-on.html
             # talks about higher number of bits for iOS
+        # XXX: why use the evaluate expression if we can extract the register directly?
         value = get_frame().EvaluateExpression("$" + operand)
         if not value.IsValid():
             return 0
@@ -4690,16 +4898,587 @@ Syntax: fixret
     if len(cmd) == 0:
         get_process().Continue()        
 
+# return the module to which an address belongs to
+# XXX: duplicate of get_module_name()
+def aux_find_module(address):
+    target = get_target()
+    addr = lldb.SBAddress(address, target)
+    module = addr.module
+    if DEBUG:
+        print(module.file.basename, module.file.fullpath)
+    return module
+
+def get_module_base(module):
+    if module is None:
+        return -1
+    if module.num_sections == 0:
+        return -1
+    target = get_target()
+    # if __PAGEZERO exists it returns -1 for the value
+    if module.sections[0].GetLoadAddress(target) != 0xffffffffffffffff:
+        return module.sections[0].GetLoadAddress(target)
+    # so we assume it's the next segment that is valid (which is the regular case)
+    else:
+        return module.sections[1].GetLoadAddress(target)
+
+def get_module_offset(address, module):
+    target = get_target()
+    addr = lldb.SBAddress(address, target)
+    segment_nr = 0
+    base = get_module_base(module)
+    return addr.GetLoadAddress(target) - base
+
+def cmd_addcomment(debugger, command, result, dict):
+    '''Add comment to address. Use \'acm help\' for more information.'''
+    help = """
+Add comment to disassembly address.
+
+Syntax: acm <address> <comment>
+ """
+    global g_dbdata
+
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+
+    if len(cmd) < 2:
+        print("[-] ERROR: Please insert an address and comment.")
+        print("")
+        print(help)
+        return
+    # the json is only loaded/created on first hook stop
+    if "comments" not in g_dbdata:
+        print("[-] Please start target first.")
+        return
+
+    # XXX: the value can be anything but if it doesn't match a disassembly address it will not be displayed
+    #      kind of not our problem - we could solve to nearest address but maybe waste of time anyway
+    value = evaluate(cmd[0])
+    if value is None:
+        print("[-] ERROR: Invalid input value.")
+        print("")
+        print(help)
+        return
+
+    # check if it's a dupe - we just update comment in that case
+    module = aux_find_module(value)
+    offset = get_module_offset(value, module)
+    mod_uuid = str(module.uuid)
+    found = None
+    if len(g_dbdata["comments"]) > 0:
+        for item in g_dbdata["comments"]:
+            if ( item["uuid"] == mod_uuid ) and ( item["offset"] == hex(offset) ):
+                found = item
+                break
+    
+    # since we split the command string we should join everything else past the address as comment
+    # XXX: is there a better solution here?
+    comment = ' '.join([str(item) for item in cmd[1:]])
+
+    if found is None:        
+        g_dbdata["comments"].append({
+            "offset": hex(offset),  # always from the base address of the module
+            "text": comment,
+            "uuid": str(module.uuid),
+            "module": os.path.abspath(module.file.fullpath)
+            })
+    # for dupes we just update the comment
+    else:
+        found["text"] = comment
+    
+    save_database(g_db)
+    print("[+] Added comment at address {}".format(hex(value)))
+    if DEBUG:
+        print(g_dbdata)
+
+def cmd_delcomment(debugger, command, result, dict):
+    '''Delete comment to address. Use \'dcm help\' for more information.'''
+    help = """
+Delete comment from disassembly address.
+
+Syntax: dcm <address>
+"""
+    global g_dbdata
+
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+
+    if len(cmd) < 1:
+        print("[-] ERROR: Please insert an address to remove comment from.")
+        print("")
+        print(help)
+        return
+    # the json is only loaded/created on first hook stop
+    if "comments" not in g_dbdata:
+        print("[-] Please start target first.")
+        return
+
+    value = evaluate(cmd[0])
+    if value is None:
+        print("[-] ERROR: Invalid input value.")
+        print("")
+        print(help)
+        return
+
+    # we don't verify if the address exists - kind of waste of time
+    # we also assume there are no dupes since add shouldn't let it happen
+    module = aux_find_module(value)
+    offset = get_module_offset(value, module)
+    mod_uuid = str(module.uuid)
+    for i in g_dbdata["comments"]:
+        if ( i["uuid"] == mod_uuid ) and ( i["offset"] == hex(offset) ):
+            g_dbdata["comments"].remove(i)
+            save_database(g_db)
+            return
+
+# XXX: to get an address we would need to resolve each module, find the base and add the offset
+def cmd_listcomments(debugger, command, result, dict):
+    '''List comments. Use \'lcm help\' for more information.'''
+    help = """
+List all disassembly comments.
+
+Syntax: lcm
+ """
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+    # nothing to present
+    if g_dbdata == {} or len(g_dbdata["comments"]) == 0:
+        return
+    print("{: <8} {:<32} {}".format("Offset", "Module", " Comment"))
+    print("--------------------------------------------------------------------------------")
+    # the live version should be equal to the disk version since we write to database after every op
+    for comment in g_dbdata["comments"]:
+        print("{: <8} {: <32}  {:s}".format(comment["offset"], comment["module"], comment["text"]))
+
+# hash the r-x region of the target process - this should be enough for the database purposes
+# x64dbg hashes the memory with murmurhash
+def hash_target():
+    process = get_process()
+    regions = process.GetMemoryRegions()
+    if regions.GetSize() < 1:
+        print("[-] ERROR: Invalid memory region.")
+        return ""
+    error = lldb.SBError()
+    reg = lldb.SBMemoryRegionInfo()
+    t = regions.GetMemoryRegionAtIndex(0, reg)
+    start = reg.GetRegionBase()
+    end = reg.GetRegionEnd()
+    # software breakpoints don't show up here so it's safe to hash the process memory
+    membuf = process.ReadMemory(start, end-start, error)
+    hash_obj = hashlib.sha256(membuf)
+    if DEBUG:
+        print(hash_obj.hexdigest())
+    return hash_obj.hexdigest()
+
+# XXX: refactor this mess
+def save_database(target):
+    # make backup copy first
+    if DEBUG:
+        print("Backup target:", target)
+    # we can only make a backup if there is something there
+    if os.path.isfile(target):
+        try:
+            buffer = open(target, 'r').read()
+            backup_name = target + '.bak'
+            with open(backup_name, 'w') as output:
+                output.write(buffer)
+        except Exception as e:
+            print("[-] ERROR: Failed to make database backup:", e)
+            return
+    # create/overwrite with the new data
+    try:
+        with open(target, 'w') as json_file:
+            json.dump(g_dbdata, json_file, sort_keys = True, indent=4)
+    except Exception as e:
+        # XXX: if it failed restore the backup when it exists
+        print("[-] ERROR: Failed to write new database:", e)
+        return
+
+# save the breakpoint session
+# the BreakpointsWriteToFile() from API doesn't work since it doesn't save all information
+# the restore from the file doesn't work because of missing addresses
+def cmd_save_session(debugger, command, result, dict):
+    '''Save breakpoint session. Use \'ss help\' for more information.'''
+    help = """
+Save breakpoint session.
+
+Syntax: ss [session name]
+
+If no session name is specified `default` will be used.
+ """
+
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+
+    if "breakpoints" not in g_dbdata:
+        print("[-] Please start target first.")
+        return
+
+    session_name = "default"
+    if len(cmd) > 0:
+        session_name = cmd[0]
+
+    # check if the session exists
+    # the json is only loaded/created on first hook stop
+    if session_name not in g_dbdata["breakpoints"]:
+        g_dbdata["breakpoints"][session_name] = []
+
+    # this doesn't work as expected - missing addresses
+    # file_spec = lldb.SBFileSpec()
+    # bpt_db_dir = g_home + '/.lldb/'
+    # bpt_db_file = g_target_hash + '.bpt'
+    # file_spec.SetDirectory(bpt_db_dir)
+    # file_spec.SetFilename(bpt_db_file)
+    # target.BreakpointsWriteToFile(file_spec)
+
+    # the breakpoints file_addr has different meanings
+    # for dyld we obtain an address without the base
+    # for an object we obtain the full base address without aslr
+    # we should just store offset to the image and then restore using current information
+    target = get_target()    
+    # list all current breakpoints and store them
+    for bpt in target.breakpoint_iter():
+        # XXX: we need to iterate all locations of each breakpoint... geezzzzzz
+        loc = bpt.location
+        # for item in bpt.locations:
+        item = loc[0]        
+        # if the address belongs nowhere this will be an invalid object so nothing to do here
+        if item is None:
+            continue
+        # don't store one time breakpoints
+        if bpt.one_shot:
+            continue
+        # get the SBAddress for this item -> so we can extract the module it belongs to and other info
+        address = item.GetAddress()
+        # the file path
+        bp_path = address.module.file.fullpath
+        # XXX: can we have valid addresses that don't belong to a module? payloads into allocated memory for example?
+        if bp_path is None:
+            continue
+        # the current breakpoint memory address
+        bp_addr = item.GetLoadAddress()
+        #print(hex(item.GetLoadAddress()), "file_addr:", hex(address.file_addr), hex(address.offset), address.section.name, "file_offset", hex(address.section.file_offset), "section file_addr", hex(address.section.file_addr), address.module.file.fullpath)
+        # we can store the offset and section information
+        segment_nr = 0
+        # we extract offset = item.GetLoadAddress() - s.GetLoadAddress(target) [section that the item belongs to]
+        # gives us the address offset since the base of that segment
+        for m in target.module_iter():
+            # this brings a problem with the main module path
+            # for example starting with lldb ./ls generates an image of ./ls
+            # but we if attach to a process that started with ./ls we have image of /Users/username/./ls (if it was in ~)
+            # or we can have full path names
+            # also a problem if the target name is different but the hash still matches
+            # since we can't hash on every lookup here
+            # we already passed that test otherwise we wouldn't have loaded the session file for that hash
+            # so we can just assume that index 0 is always the main image and compare the full path for libraries and frameworks
+            # in theory the UUID should be unique and it's available from SBModule
+            # if the target was patched but UUID is still the same that isnt a problem because the hash
+            # this is valid for the main program - not valid for patched libs/frameworks since we don't hash those
+            # that would be kinda of irrelevant anyway since the main target is still the same
+            #if m.file.fullpath == address.module.file.fullpath:
+            if m.uuid == address.module.uuid:
+                # print("[+] Found breakpoint module: {:s}".format(bp_path))
+                # these are the segments
+                # print("[+] Iterating segments...")
+                for s in m.sections:
+                    #print(s.name, s.GetNumSubSections(), hex(s.file_addr), hex(address.section.file_addr), hex(address.section.addr), hex(s.GetLoadAddress(target)))
+                    #if address.section.file_addr > s.file_addr and address.section.file_addr < s.file_addr + s.file_size:
+                    if bp_addr > s.GetLoadAddress(target) and bp_addr < s.GetLoadAddress(target) + s.size:
+                        # this gives us the offset since the beginning of the segment
+                        # because the internal lldb info has different meanings for the main binary and the libraries
+                        # so it's easier to compute this value that can be used with loaded and attached targets, ASLRed or not
+                        offset = item.GetLoadAddress() - s.GetLoadAddress(target)
+                        break
+                    segment_nr += 1
+        # store the breakpoint information
+        names = lldb.SBStringList()
+        bpt.GetNames(names)
+        name = ""
+        if names.IsValid():
+            # we assume there is only one breakpoint name
+            name = names.GetStringAtIndex(0)
+        
+        commands = lldb.SBStringList()
+        cmds = []
+        # returns true if there are command line commands
+        if bpt.GetCommandLineCommands(commands):
+            for i in range(commands.GetSize()):
+                cmds.append(commands.GetStringAtIndex(i))
+        # not available on every lldb version
+        try:
+            hardware = bpt.IsHardware()
+        except:
+            hardware = False
+
+        condition = bpt.GetCondition()
+        if condition is None:
+            condition = ""
+
+        module_path = os.path.abspath(address.module.file.fullpath)
+
+        entry = {
+            "offset": hex(offset),
+            "address": hex(address.file_addr), # use the VM file address to help user have a reference since the offset is kinda opaque
+            "segment": segment_nr,
+            "enabled": bpt.enabled,
+            "name": name,
+            "hardware": hardware,
+            "module": module_path,
+            "uuid": str(address.module.uuid),
+            "commands": cmds,
+            "condition": condition
+        }
+        found = 0
+        # verify if the breakpoint already exists and update with the new info
+        # XXX: this is ugly, to refactor
+        for i, item in enumerate(g_dbdata["breakpoints"][session_name]):
+            # this should be enough to match
+            if item["module"] == module_path and item["offset"] == hex(offset):
+                g_dbdata["breakpoints"][session_name][i] = entry
+                found = 1
+                break
+        # not found so it's a new entry
+        if found == 0:
+            g_dbdata["breakpoints"][session_name].append(entry)
+
+    if DEBUG:
+        print(g_dbdata)
+    # write to storage
+    save_database(g_db)
+
+# restore the breakpoint session
+def cmd_restore_session(debugger, command, result, dict):
+    '''Restore breakpoint session. Use \'rs help\' for more information.'''
+    help = """
+Restore breakpoint session.
+
+Syntax: rs [session name]
+
+If no session name is specified `default` will be used.
+ """
+
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+    # the json is only loaded/created on first hook stop
+    if "breakpoints" not in g_dbdata:
+        print("[-] Please start target first.")
+        return
+
+    if len(g_dbdata["breakpoints"]) == 0:
+        print("No breakpoint sessions found.")
+        return
+
+    session_name = "default"
+    if len(cmd) > 0:
+        session_name = cmd[0]
+    # don't restore what we don't know about
+    if session_name not in g_dbdata["breakpoints"]:
+        print("[-] error: requested session name not found.")
+        return
+
+    target = get_target()
+    # build dictionary of all loaded modules
+    modules = {}
+    for m in target.module_iter():
+        modules[str(m.uuid)] = m
+    # build dictionary of existing breakpoints
+    # this doesn't avoid duplicate breakpoints inside the session file but we expect that to not exist
+    breakpoints = {}
+    for bpt in target.breakpoint_iter():
+        # we assume always the first location
+        item = bpt.location[0]
+        if item is None:
+            continue
+        bp_addr = item.GetLoadAddress()
+        breakpoints[bp_addr] = 1
+
+    for i in g_dbdata["breakpoints"][session_name]:
+        # we need to have the module already loaded to restore
+        # otherwise we don't know the base address for the stored offset
+        # this is fine for the main binary and dyld breakpoints
+        # but a problem but libraries/frameworks that aren't loaded yet on initial breakpoint inside dyld
+        # the solution is to restore on the main binary entrypoint where the frameworks are already linked into the memory space
+        if i["uuid"] in modules:
+            m = modules[i["uuid"]]
+            if DEBUG:
+                print("Found module:", m.file.fullpath, m.num_sections)
+            # these are segments and the subsections are the real sections in mach-o language
+            #for s in m.sections:
+            #    print(s)
+            seg = m.GetSectionAtIndex(i["segment"])
+            # XXX: validate value?
+            la = seg.GetLoadAddress(target)
+            # print("Module load address: 0x{:x}".format(la))
+            target_bpt = la + int(i["offset"], 16)
+            # XXX: verify if the resulting address fits the segment?
+            # XXX: hardware breakpoints
+            # check if breakpoint already exists
+            # no warning to the user given in this case - maybe we should say something?
+            if target_bpt in breakpoints:
+                continue
+            print("[+] Restoring breakpoint at 0x{:x} in {}.".format(target_bpt, i["module"]))
+            b = target.BreakpointCreateByAddress(target_bpt)
+            if i["enabled"] is False:
+                b.SetEnabled(False)
+            if i["condition"] != "":
+                b.SetCondition(i["condition"])
+            if i["name"] != "":
+                b.AddName(i["name"])
+            if len(i["commands"]) > 0:
+                # we need to rebuild everything back into a SBStringList
+                cmds = lldb.SBStringList()
+                for x in i["commands"]:
+                    # the strings will be incoming as unicode so we need to convert them to plain string
+                    cmds.AppendString(str(x))
+                b.SetCommandLineCommands(cmds)
+            if DEBUG:
+                print(i)
+        else:
+            print("[!] warning: couldn't find image {} to restore breakpoint. Still too early for this?".format(i["module"]))
+
+# list all the available breakpoint sessions
+# XXX: we can't display the target addresses because we don't store that information
+# this is a bit annoying since it's hard to keep track of what is what until they are restored
+def cmd_list_sessions(debugger, command, result, dict):
+    '''List breakpoint sessions. Use \'ss help\' for more information.'''
+    help = """
+List breakpoint sessions.
+
+Syntax: ls
+ """
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+    # the json is only loaded/created on first hook stop
+    if "breakpoints" not in g_dbdata:
+        print("[-] Please start target first.")
+        return
+
+    if len(g_dbdata["breakpoints"]) == 0:
+        print("No breakpoint sessions found.")
+        return
+
+    print("{:<18} {: <13}".format("Session Name", "# Breakpoints"))
+    print("--------------------------------")
+    for name in g_dbdata["breakpoints"]:
+        print("{:<18} {:^13d}".format(name, len(g_dbdata["breakpoints"][name])))
+
+# we hook this so we have a chance to initialize/reset some stuff when targets are (re)run
+# also modify to stop at entry point since we can't set breakpoints before
+def cmd_run(debugger, command, result, dict):
+    '''Run the target and stop at entry. Everything else after the command is considered target arguments.'''
+    help = """
+Run the target, stopping at entry (dyld).
+
+Syntax: r
+
+Note: 'r' is an abbreviation for 'process launch -s -X true --'.
+Replaces the original r/run alias.
+ """
+    # reset internal state variables
+
+    res = lldb.SBCommandReturnObject()    
+    # must be set to true otherwise we don't get any output on the first stop hook related to this
+    debugger.SetAsync(True)
+    # imitate the original 'r' alias plus the stop at entry and pass everything else as target argv[]
+    debugger.GetCommandInterpreter().HandleCommand("process launch -s -X true -- {}".format(command), res)
+
 #------------------------------------------------------------
 # The heart of lldbinit - when lldb stop this is where we land 
 #------------------------------------------------------------
 
+def HandleProcessLaunchHook(debugger, command, result, dict):
+    print("Hello World!!!")
+    return 0
+
+# this only happens if there is a lldb stop
+# also any commands that depend on a target existing can't run
+# this creates a problem for hashing the target and loading the database
+# since this hook hits many times on a debugging session (stepping code for example)
+# one idea could be to define a hook on dyld_start that gets hit when we use
+# process launch -s
+# this would allow us to initialize everything only once but potentially conflict with user workflow
 def HandleHookStopOnTarget(debugger, command, result, dict):
     '''Display current code context.'''
+    global g_current_target
+    global g_dbdata
+    global g_home
+    global g_target_hash
+    global g_db
+    global GlobalListOutput
+    global CONFIG_DISPLAY_STACK_WINDOW
+    global CONFIG_DISPLAY_FLOW_WINDOW
+    global POINTER_SIZE
 
-    # Don't display anything if we're inside Xcode
+    #if DEBUG:
+    #start_time = time.time()
+
+    # Don't do anything if we're inside Xcode otherwise it will block everything there
     if os.getenv('PATH').startswith('/Applications/Xcode'):
         return
+
+    target = get_target()
+    exe = target.executable
+    # XXX: there is a bug with older version where this hook is triggered on attach
+    #      but the memory regions are still empty here
+    #      in newer versions this doesn't occur because the hook doesn't trigger on attach (and executing "context" command works ok)
+    # workaround for older versions
+    if get_process().GetMemoryRegions().GetSize() == 0:
+        print("[!] Attaching to process and memory regions info still not available")
+        return
+
+    # load or initialize on first usage or different target
+    # XXX: there is a bug in LLDB where it doesn't update the basename and fullpath internally if the files are identical
+    #      but are started from different paths
+    #      it does launch the new executable if we use "target create" after running the initial target
+    #      but "target list" shows info of the previous one
+    #      this happens if we launch with "lldb target" or empty and create the target inside
+    #      if target files are different it works as expected
+    if g_current_target == "" or g_current_target != exe.fullpath:
+        g_current_target = exe.fullpath
+        # we use the hash to lookup database file
+        # one side effect (positive?) is that we don't have hash conflicts
+        # since if there is hash mismatch the db file doesn't exist
+        # x64dbg uses name instead and deals with the mismatches
+        g_target_hash = hash_target()
+        g_db = g_home + '/.lldb/' + g_target_hash + '.json'
+        # load for a known target
+        if os.path.exists(g_db):
+            with open(g_db, 'r') as f:
+                g_dbdata = json.load(f)    
+            if DEBUG:
+                print(g_dbdata)
+            # check if hashes match
+            # this is unreachable when hashes are used
+            #if g_dbdata["target"]["hash"] != g_target_hash:
+            #    print("[!] Mismatch between target hash and database hash!")
+                # XXX: initialize a new database? what to do here?
+        # initialize for a new target
+        else:
+            # create skeleton
+            g_dbdata['version'] = "1" # better use a version in case we need future expansion
+            g_dbdata['comments'] = []
+            g_dbdata['breakpoints'] = {}
+            g_dbdata['target'] = {}
+            g_dbdata['target'].update({
+                "name": exe.basename,
+                "path": os.path.abspath(exe.fullpath),
+                "last_path": "", # last seen path? maybe remove?
+                "hash": g_target_hash # a bit redudant since the hash is the name but lets keep it
+                })
+            save_database(g_db)
+            if DEBUG:
+                print(g_dbdata)
 
     # the separator strings based on configuration and target arch
     if is_i386():
@@ -4718,11 +5497,6 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         arch = get_arch()
         print("[-] error: unknown and unsupported architecture : " + arch)
         return
-
-    global GlobalListOutput
-    global CONFIG_DISPLAY_STACK_WINDOW
-    global CONFIG_DISPLAY_FLOW_WINDOW
-    global POINTER_SIZE
 
     debugger.SetAsync(True)
 
@@ -4786,4 +5560,6 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     data = "".join(GlobalListOutput)
     result.PutCString(data)
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
+    #if DEBUG:
+    #print("{} seconds".format(time.time() - start_time))
     return 0

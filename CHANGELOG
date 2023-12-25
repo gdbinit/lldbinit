@@ -1,0 +1,38 @@
+v3.1beta - 25/12/2023
+---------------------
+
+* Add breakpoint session save and restore. New commands are 'ss', 'rs', 'ls'.
+
+* Add feature to add comments to disassembly view. New commands are 'acm', 'dcm', 'lcm'.
+
+* Fix short help for every command.
+
+* Rename 'bhb' command to 'bh' for consistency.
+
+* Improve output of print_images command
+
+* Accept spaces in the bm command
+
+* Replace aliases for run and breakpoint with our own command.
+
+* Replace 'bpl' command with our own version and different output. The original can be called with 'breakpoint list'.
+
+* Fix the crack cmds for arm64
+
+* Add missing pointer authenticated branches and add missing PAC removal from pointers
+
+
+v3.0 - 20/04/2023
+-----------------
+
+* Full arm64 (AArch64) support for most commands and displays.
+
+* Add new `bm` command to break when specific images/modules are loaded. Super useful to break on dynamic libraries for malware analysis and other reversing tasks. This could be done manually with stop on shared library events setting but this command automates and simplifies the process.
+
+* Cleaned up, simplified, improved and updated code.
+
+* Bug fixes.
+
+* Small changes and improvements to UI.
+
+* Dark theme support. Not really a dark theme for now other than fixing basic colors to look ok. Pull requests?
