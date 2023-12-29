@@ -84,7 +84,7 @@ except ImportError:
     pass
 
 VERSION = "3.1"
-BUILD = "381"
+BUILD = "382"
 
 #
 # User configurable options
@@ -1189,8 +1189,6 @@ def cmd_bp(debugger, command, result, dict):
 Set a software breakpoint.
 
 Syntax: b <address> [breakpoint name]
-
-Note: breakpoint name must *not* use spaces
 """
 
     cmd = command.split()
@@ -1211,15 +1209,15 @@ Note: breakpoint name must *not* use spaces
         return
     
     # accept spaces and replace them with underscores
+    # the breakpoint names don't allow spaces?
     name = ""
     if len(cmd) > 1:
         name = '_'.join([str(item) for item in cmd[1:]])
 
-    res = lldb.SBCommandReturnObject()
+    target = get_target()
+    breakpoint = target.BreakpointCreateByAddress(value)
     if name != "":
-        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -a {} -N {}".format(hex(value), name), res)
-    else:
-        lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -a {}".format(hex(value)), res)
+        breakpoint.AddName(name)
 
     print("[+] Software breakpoint set at 0x{:x}".format(value))
     return
@@ -1257,7 +1255,7 @@ Note: expressions are supported, do not use spaces between operators.
     breakpoint.SetOneShot(True)
     breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
 
-    print("[+] Set temporary breakpoint at 0x{:x}".format(value))
+    print("[+] Set temporary software breakpoint at 0x{:x}".format(value))
 
 # hardware breakpoint
 def cmd_bh(debugger, command, result, dict):
