@@ -84,7 +84,7 @@ except ImportError:
     pass
 
 VERSION = "3.1"
-BUILD = "376"
+BUILD = "380"
 
 #
 # User configurable options
@@ -1509,7 +1509,6 @@ Syntax: bpl
     print("{:<4} {: <18} {} {} {: <24} {}".format("#", "Address", "Enabled", "Count", "Module", "Name"))
     print("--------------------------------------------------------------------------------")
     # the live version should be equal to the disk version since we write to database after every op
-    count = 1
     for bpt in target.breakpoint_iter():
         # XXX: we assume always the first location
         item = bpt.location[0]
@@ -1548,8 +1547,7 @@ Syntax: bpl
         bpt.GetNames(names)
         if names.IsValid():
             name = names.GetStringAtIndex(0)
-        print("{:<3} {:1}{: <18} {:^7s} {:^5d} {: <24} {}".format(count, temp,hex(bp_addr), enabled, bpt.GetHitCount(), binary, name))
-        count += 1
+        print("{:<3} {:1}{: <18} {:^7s} {:^5d} {: <24} {}".format(bpt.id, temp,hex(bp_addr), enabled, bpt.GetHitCount(), binary, name))
 
 # skip current instruction - just advances PC to next instruction but doesn't execute it
 def cmd_skip(debugger, command, result, dict):
@@ -5330,9 +5328,9 @@ If no session name is specified `default` will be used.
             if i["enabled"] is False:
                 b.SetEnabled(False)
             if i["condition"] != "":
-                b.SetCondition(i["condition"])
+                b.SetCondition(str(i["condition"]))
             if i["name"] != "":
-                b.AddName(i["name"])
+                b.AddName(str(i["name"]))
             if len(i["commands"]) > 0:
                 # we need to rebuild everything back into a SBStringList
                 cmds = lldb.SBStringList()
