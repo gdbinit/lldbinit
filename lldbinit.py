@@ -84,7 +84,7 @@ except ImportError:
     pass
 
 VERSION = "3.1"
-BUILD = "380"
+BUILD = "381"
 
 #
 # User configurable options
@@ -1210,9 +1210,10 @@ Note: breakpoint name must *not* use spaces
         print(help)
         return
     
+    # accept spaces and replace them with underscores
     name = ""
     if len(cmd) > 1:
-        name = cmd[1]
+        name = '_'.join([str(item) for item in cmd[1:]])
 
     res = lldb.SBCommandReturnObject()
     if name != "":
