@@ -84,7 +84,7 @@ except ImportError:
     pass
 
 VERSION = "3.1"
-BUILD = "382"
+BUILD = "383"
 
 #
 # User configurable options
@@ -5513,14 +5513,31 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # or this hook is called
     POINTER_SIZE = get_pointer_size()
 
-    while True:
-        frame = get_frame()
+    # if we stopped because of a breakpoint try to extract which was it so we can display the name if it exists
+    bp_name = ""
         thread = frame.GetThread()
-        
-        if thread.GetStopReason() == lldb.eStopReasonNone or thread.GetStopReason() == lldb.eStopReasonInvalid:
-            time.sleep(0.001)
-        else:
-            break
+    stop_reason = thread.GetStopReason()
+    if stop_reason == lldb.eStopReasonBreakpoint:
+        if thread.GetStopReasonDataCount() > 0:
+            # this gives us the breakpoint id
+            bp_id = thread.GetStopReasonDataAtIndex(0)
+            # now we can try to locate it
+            bpx = target.FindBreakpointByID(bp_id)
+            # and build the names list
+            names = lldb.SBStringList()
+            bpx.GetNames(names)
+            if names.IsValid():
+                # we assume there is only one breakpoint name
+                bp_name = names.GetStringAtIndex(0)
+
+    # XXX: not sure we need this anymore, if it was ever necessary
+    # while True:
+    #     frame = get_frame()
+    #     thread = frame.GetThread()
+    #     if thread.GetStopReason() == lldb.eStopReasonNone or thread.GetStopReason() == lldb.eStopReasonInvalid:
+    #         time.sleep(0.001)
+    #     else:
+    #         break
 
     GlobalListOutput = []
 
@@ -5551,7 +5568,9 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # disassemble and add its contents to output inside
     disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
     output(COLOR_SEPARATOR + bottom_sep + RESET)
-
+    # XXX: find a better place for this - or maybe not
+    if bp_name != "":
+        output("\nBreakpoint name: " + bp_name)
     # XXX: do we really need to output all data into the array and then print it in a single go? faster to just print directly?
     # was it done this way because previously disassembly was capturing the output and modifying it?
     data = "".join(GlobalListOutput)
