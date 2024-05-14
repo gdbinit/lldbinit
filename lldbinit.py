@@ -2242,7 +2242,7 @@ Syntax: crackcmd_noret <address> <register> <value>
     elif is_i386():
         valid = [ "eip", "eax", "ebx", "ebp", "esp", "edi", "esi", "edx", "ecx" ]
     if register not in valid:
-            print("[-] error: invalid register for i386 architecture.")
+        print("[-] error: invalid register for i386 architecture.")
         print(help)
         return
 
@@ -5515,7 +5515,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
 
     # if we stopped because of a breakpoint try to extract which was it so we can display the name if it exists
     bp_name = ""
-        thread = frame.GetThread()
+    thread = frame.GetThread()
     stop_reason = thread.GetStopReason()
     if stop_reason == lldb.eStopReasonBreakpoint:
         if thread.GetStopReasonDataCount() > 0:
