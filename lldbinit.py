@@ -2788,14 +2788,13 @@ def cmd_findmem(debugger, command, result, dict):
     scan_list = []
     for i in range(0, regions.GetSize()):
         reg = lldb.SBMemoryRegionInfo()
-        t = regions.GetMemoryRegionAtIndex(i, reg)
-        isexec = reg.IsExecutable()
-        isread = reg.IsReadable()
-        iswrite = reg.IsWritable()
-        tmp = []
-        tmp.append(reg.GetRegionBase())
-        tmp.append(reg.GetRegionEnd())
-        scan_list.append(tmp)
+        if not regions.GetMemoryRegionAtIndex(i, reg):
+            continue
+
+        if not (reg.IsReadable() or reg.IsWritable()):
+            continue
+
+        scan_list.append([reg.GetRegionBase(), reg.GetRegionEnd()])
 
     for x in scan_list:
         mem_name = ""
