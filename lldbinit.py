@@ -5429,10 +5429,12 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # XXX: there is a bug with older version where this hook is triggered on attach
     #      but the memory regions are still empty here
     #      in newer versions this doesn't occur because the hook doesn't trigger on attach (and executing "context" command works ok)
+    # XXX: and now on newer versions doing this has huge performance penalty (almost half a second!!!!!)
+    #      so disable it for now until further research (regression????)
     # workaround for older versions
-    if get_process().GetMemoryRegions().GetSize() == 0:
-        print("[!] Attaching to process and memory regions info still not available")
-        return
+    #if get_process().GetMemoryRegions().GetSize() == 0:
+    #    print("[!] Attaching to process and memory regions info still not available")
+    #    return
 
     # load or initialize on first usage or different target
     # XXX: there is a bug in LLDB where it doesn't update the basename and fullpath internally if the files are identical
