@@ -249,18 +249,6 @@ dyld_mode_dict = {
 
 MIN_COLUMNS = 125
 MIN_ROWS = 25
-# test terminal - idea from https://github.com/ant4g0nist/lisa.py/
-try:
-    tty_rows, tty_columns = struct.unpack("hh", fcntl.ioctl(1, termios.TIOCGWINSZ, "1234"))
-    # i386 is fine with 87x21
-    # x64 is fine with 125x23
-    # aarch64 is fine with 108x26
-    if tty_columns < MIN_COLUMNS or tty_rows < MIN_ROWS:
-        print("\033[1m\033[31m[!] current terminal size is {:d}x{:d}".format(tty_columns, tty_rows))
-        print("[!] lldbinit is best experienced with a terminal size at least {}x{}\033[0m".format(MIN_COLUMNS, MIN_ROWS))
-except Exception as e:
-    print("\033[1m\033[31m[-] failed to find out terminal size.")
-    print("[!] lldbinit is best experienced with a terminal size at least {}x{}\033[0m".format(MIN_COLUMNS, MIN_ROWS))
 
 def __lldb_init_module(debugger, internal_dict):
     ''' we can execute lldb commands using debugger.HandleCommand() which makes all output to default
@@ -273,6 +261,19 @@ def __lldb_init_module(debugger, internal_dict):
     # don't load if we are in Xcode since it is not compatible and will block Xcode
     if os.getenv('PATH').startswith('/Applications/Xcode'):
         return
+
+    # test terminal - idea from https://github.com/ant4g0nist/lisa.py/
+    try:
+        tty_rows, tty_columns = struct.unpack("hh", fcntl.ioctl(1, termios.TIOCGWINSZ, "1234"))
+        # i386 is fine with 87x21
+        # x64 is fine with 125x23
+        # aarch64 is fine with 108x26
+        if tty_columns < MIN_COLUMNS or tty_rows < MIN_ROWS:
+            print("\033[1m\033[31m[!] current terminal size is {:d}x{:d}".format(tty_columns, tty_rows))
+            print("[!] lldbinit is best experienced with a terminal size at least {}x{}\033[0m".format(MIN_COLUMNS, MIN_ROWS))
+    except Exception as e:
+        print("\033[1m\033[31m[-] failed to find out terminal size.")
+        print("[!] lldbinit is best experienced with a terminal size at least {}x{}\033[0m".format(MIN_COLUMNS, MIN_ROWS))
 
     global g_home
     if g_home == "":
