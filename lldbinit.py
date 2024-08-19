@@ -249,6 +249,8 @@ dyld_mode_dict = {
 
 MIN_COLUMNS = 125
 MIN_ROWS = 25
+LLDB_MAJOR = 0
+LLDB_MINOR = 0
 
 def __lldb_init_module(debugger, internal_dict):
     ''' we can execute lldb commands using debugger.HandleCommand() which makes all output to default
@@ -275,7 +277,8 @@ def __lldb_init_module(debugger, internal_dict):
         print("\033[1m\033[31m[-] failed to find out terminal size.")
         print("[!] lldbinit is best experienced with a terminal size at least {}x{}\033[0m".format(MIN_COLUMNS, MIN_ROWS))
 
-    global g_home
+    global g_home, LLDB_MAJOR, LLDB_MINOR
+
     if g_home == "":
         g_home = os.getenv('HOME')
     
@@ -495,11 +498,23 @@ def __lldb_init_module(debugger, internal_dict):
     # custom commands
     ci.HandleCommand("command script add -h '(lldbinit) Fix return breakpoint.' -f lldbinit.cmd_fixret fixret", res)
     # displays the version banner when lldb is loaded
+    LLDB_MAJOR, LLDB_MINOR = get_lldb_version(debugger)
     debugger.HandleCommand("banner")
     return
 
+def get_lldb_version(debugger):
+    lldb_versions_match = re.search(r'[lL][lL][dD][bB]-(\d+)([.](\d+))?([.](\d+))?', debugger.GetVersionString())
+    lldb_version = 0
+    lldb_minor = 0
+    if len(lldb_versions_match.groups()) >= 1 and lldb_versions_match.groups()[0]:
+        lldb_major = int(lldb_versions_match.groups()[0])
+    if len(lldb_versions_match.groups()) >= 5 and lldb_versions_match.groups()[4]:
+        lldb_minor = int(lldb_versions_match.groups()[4])
+    return lldb_major, lldb_minor
+
 def cmd_banner(debugger,command,result,dict):    
-    print(GREEN + "[+] Loaded lldbinit version " + VERSION + "." + BUILD + RESET)
+    lldbver = debugger.GetVersionString().split('\n')[0]
+    print(GREEN + "[+] Loaded lldbinit version " + VERSION + "." + BUILD + " @ " + lldbver + RESET)
 
 def cmd_lldbinitcmds(debugger, command, result, dict):
     '''Display all available lldbinit commands.'''
@@ -5430,12 +5445,19 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # XXX: there is a bug with older version where this hook is triggered on attach
     #      but the memory regions are still empty here
     #      in newer versions this doesn't occur because the hook doesn't trigger on attach (and executing "context" command works ok)
-    # XXX: and now on newer versions doing this has huge performance penalty (almost half a second!!!!!)
-    #      so disable it for now until further research (regression????)
+    #      this also means that we don't automatically get the display on attach and need to issue context if we wish so
+    #
+    #      the error message is: [-] ERROR: Invalid memory region.
+    #      and a traceback to exception: Exception: [!] warning: get_frame() failed. Is the target binary started?
+    #
     # workaround for older versions
-    #if get_process().GetMemoryRegions().GetSize() == 0:
-    #    print("[!] Attaching to process and memory regions info still not available")
-    #    return
+    # at least Xcode 10.1 has this problem
+    # issuing the get memory regions on every stop has huge performance penalty on newer xcode versions (at least with Xcode 15.4)
+    # XXX: needs more versions tested to find out where is the true cut off version
+    if LLDB_MAJOR <= 1000:
+        if get_process().GetMemoryRegions().GetSize() == 0:
+            print("[!] Attaching to process and memory regions info still not available. Use 'context' command to display current state.\n")
+            return
 
     # load or initialize on first usage or different target
     # XXX: there is a bug in LLDB where it doesn't update the basename and fullpath internally if the files are identical
