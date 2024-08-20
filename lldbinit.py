@@ -878,11 +878,29 @@ def antidebug_ptrace_callback(frame, bp_loc, dict):
         get_thread().ReturnFromFrame(frame, frame.registers[0].GetChildMemberWithName(src_reg))
     get_process().Continue()
 
+# debugger detection via the mach exception ports
+def antidebug_task_exception_ports_callback(frame, bp_loc, dict):
+    if frame is None:
+        return 0
+    if is_x64():
+        src_reg = "rsi"
+    elif is_arm():
+        src_reg = "x1"
+    exception_mask = int(frame.FindRegister(src_reg).GetValue(), 16)
+    if exception_mask != 0x0:
+        print("[+] Hit {} antidebug request".format(get_frame().symbol.name))
+        error = lldb.SBError()
+        result = frame.registers[0].GetChildMemberWithName(src_reg).SetValueFromCString("0x0", error)
+        if not result:
+            print("[-] error: failed to write to {} register".format(src_reg))
+            return 0
+    get_process().Continue()
+
 def cmd_antidebug(debugger, command, result, dict):
     '''Enable anti-anti-debugging. Use \'antidebug help\' for more information.'''
     help = """
 Enable anti-anti-debugging measures.
-Bypasses debugger detection via sysctl, ptrace PT_DENY_ATTACH.
+Bypasses debugger detection via sysctl, ptrace PT_DENY_ATTACH, and task exception ports.
 
 Syntax: antidebug
 """
@@ -894,10 +912,17 @@ Syntax: antidebug
     target = get_target()
     for m in target.module_iter():
         if m.file.fullpath == "/usr/lib/dyld":
-            breakpoint = target.BreakpointCreateByName("sysctl", '/usr/lib/system/libsystem_c.dylib')
-            breakpoint.SetScriptCallbackFunction('lldbinit.antidebug_callback_step1')
-            breakpoint2 = target.BreakpointCreateByName("ptrace", "/usr/lib/system/libsystem_kernel.dylib")
-            breakpoint2.SetScriptCallbackFunction("lldbinit.antidebug_ptrace_callback")
+            # sysctl
+            bp = target.BreakpointCreateByName("sysctl", '/usr/lib/system/libsystem_c.dylib')
+            bp.SetScriptCallbackFunction('lldbinit.antidebug_callback_step1')
+            # PT_DENY_ATTACH
+            bp2 = target.BreakpointCreateByName("ptrace", "/usr/lib/system/libsystem_kernel.dylib")
+            bp2.SetScriptCallbackFunction("lldbinit.antidebug_ptrace_callback")
+            # mach exception ports
+            bp3 = target.BreakpointCreateByName("task_get_exception_ports", "/usr/lib/system/libsystem_kernel.dylib")
+            bp3.SetScriptCallbackFunction("lldbinit.antidebug_task_exception_ports_callback")
+            bp4 = target.BreakpointCreateByName("task_set_exception_ports", "/usr/lib/system/libsystem_kernel.dylib")
+            bp4.SetScriptCallbackFunction("lldbinit.antidebug_task_exception_ports_callback")
             print("[+] Enabled anti-anti-debugging measures")
             break
 
