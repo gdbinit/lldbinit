@@ -761,6 +761,7 @@ ANTIDEBUG_SYSCTL_OBJS = []
 # we are at the return address of sysctl symbol
 # and we simply remove the P_TRACED flag if it exists
 def antidebug_callback_step2(frame, bp_loc, dict):
+    P_TRACED = 0x800
     global ANTIDEBUG_SYSCTL_OBJS
     # print("[+] Hit antidebug_callback_step2")
     for i in ANTIDEBUG_SYSCTL_OBJS:
@@ -770,10 +771,11 @@ def antidebug_callback_step2(frame, bp_loc, dict):
         target = get_target()
         error = lldb.SBError()
         # read the current value so we can modify and write again
-        # we could probably use an expression via cmdline to make it easier
         value = get_process().ReadUnsignedFromMemory(i+offset, 4, error)
-        # remove P_TRACED flag if exists
-        value = value ^ 0x800
+        # remove P_TRACED flag if it exists
+        if value & P_TRACED:
+            print("[+] Hit sysctl antidebug request")
+            value = value ^ P_TRACED
         # WriteMemory accepts a string so we need to pack this
         patch = struct.pack("I", value)
         result = target.GetProcess().WriteMemory(i+offset, patch, error)
