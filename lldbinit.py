@@ -764,7 +764,6 @@ def antidebug_callback_step2(frame, bp_loc, dict):
     global ANTIDEBUG_SYSCTL_OBJS
     # print("[+] Hit antidebug_callback_step2")
     for i in ANTIDEBUG_SYSCTL_OBJS:
-        #print(hex(i))
         ANTIDEBUG_SYSCTL_OBJS.remove(i)
         # offset to kp_proc.p_flag - this should be stable
         offset = 0x20
@@ -773,8 +772,7 @@ def antidebug_callback_step2(frame, bp_loc, dict):
         # read the current value so we can modify and write again
         # we could probably use an expression via cmdline to make it easier
         value = get_process().ReadUnsignedFromMemory(i+offset, 4, error)
-        #print("before {}".format(hex(value)))
-        # remve P_TRACED flag if exists
+        # remove P_TRACED flag if exists
         value = value ^ 0x800
         # WriteMemory accepts a string so we need to pack this
         patch = struct.pack("I", value)
@@ -782,8 +780,6 @@ def antidebug_callback_step2(frame, bp_loc, dict):
         if not error.Success():
             print("[-] error: Failed to write memory at 0x{:x}.".format(i+offset))
             return
-        #value = get_process().ReadUnsignedFromMemory(i+offset, 4, error)
-        #print("after {}".format(hex(value)))
         get_process().Continue()
 
 # the first step breakpoint callback of the sysctl antidebug bypass
@@ -827,7 +823,7 @@ def antidebug_callback_step1(frame, bp_loc, dict):
     # so we need to verify on the return and remove the flag
     # CTL_KERN (1) - KERN_PROC (14) - KERN_PROC_PID (1)
     if mib0 == 1 and mib1 == 14 and mib2 == 1:
-        print("[+] Hit sysctl antidebug request")
+        # print("[+] Hit sysctl antidebug request")
         # the pointer to the sysctl output oldp
         oldp = int(frame.FindRegister(dst_reg).GetValue(), 16)
         if oldp == 0:
@@ -836,11 +832,12 @@ def antidebug_callback_step1(frame, bp_loc, dict):
         ANTIDEBUG_SYSCTL_OBJS.append(oldp)
         # set a temporary breakpoint on the ret
         # temporary because we can't sync this with other sysctl calls
+        # and we don't want to tamper with the rest of the results - just with the P_TRACED flag
         mem_sbaddr = lldb.SBAddress(int(frame.FindRegister('pc').GetValue(), 16), target)
         # flavor only relevant for x86, ignored when aarch64
         inst = target.ReadInstructions(mem_sbaddr, 64, "intel")
         for i in inst:
-            # print(hex(i.addr.GetLoadAddress(target)), i.mnemonic)
+            # print(hex(i.GetAddress().GetLoadAddress(target)), i.GetMnemonic(target))
             # the properties seem broken in newer lldb versions because this will fail
             # if we use i.mnemonic - the SBTarget will be NULL
             # what's going on with lldb regressions?
@@ -857,16 +854,38 @@ def antidebug_callback_step1(frame, bp_loc, dict):
     # everything automatic here so continue in any case
     get_process().Continue()
 
+# bypass PT_DENY_ATTACH via ptrace() call
+def antidebug_ptrace_callback(frame, bp_loc, dict):
+    PT_DENY_ATTACH = 31
+    error = lldb.SBError()
+    if is_x64():
+        src_reg = "rdi"
+    elif is_arm():
+        src_reg = "x0"
+    request = int(frame.FindRegister(src_reg).GetValue(), 16)
+    if request == PT_DENY_ATTACH:
+        print("[+] Hit ptrace anti-debug request")
+        if is_x64():
+            src_reg = "rax"
+        elif is_arm():
+            src_reg = "x0"
+        # we are essentially bypassing the whole call to return a value of 0
+        result = frame.registers[0].GetChildMemberWithName(src_reg).SetValueFromCString("0x0", error)
+        if not result:
+            print("[-] error: failed to write to {} register".format(src_reg))
+            return 0
+        # and return immediately to the caller without executing any ptrace() code
+        get_thread().ReturnFromFrame(frame, frame.registers[0].GetChildMemberWithName(src_reg))
+    get_process().Continue()
+
 def cmd_antidebug(debugger, command, result, dict):
     '''Enable anti-anti-debugging. Use \'antidebug help\' for more information.'''
     help = """
 Enable anti-anti-debugging measures.
-Bypasses sysctl AmIBeingDebugged debugger detection.
+Bypasses debugger detection via sysctl, ptrace PT_DENY_ATTACH.
 
 Syntax: antidebug
 """
-    global modules_list
-
     cmd = command.split()
     if len(cmd) > 0 and cmd[0] == "help":
         print(help)
@@ -874,12 +893,13 @@ Syntax: antidebug
 
     target = get_target()
     for m in target.module_iter():
-        # print(m.file.fullpath)
         if m.file.fullpath == "/usr/lib/dyld":
             breakpoint = target.BreakpointCreateByName("sysctl", '/usr/lib/system/libsystem_c.dylib')
             breakpoint.SetScriptCallbackFunction('lldbinit.antidebug_callback_step1')
+            breakpoint2 = target.BreakpointCreateByName("ptrace", "/usr/lib/system/libsystem_kernel.dylib")
+            breakpoint2.SetScriptCallbackFunction("lldbinit.antidebug_ptrace_callback")
+            print("[+] Enabled anti-anti-debugging measures")
             break
-    print("[+] Enabled anti-anti-debugging measures")
 
 # the callback for the specific module loaded breakpoint
 # supports x64, i386, arm64
@@ -3950,7 +3970,6 @@ def get_mnemonic(target_addr):
     cur_instruction = instruction_list.GetInstructionAtIndex(0)
     # much easier to use the mnemonic output instead of disassembling via cmd line and parse
     mnemonic = cur_instruction.GetMnemonic(target)
-
     return mnemonic
 
 # returns the instruction operands

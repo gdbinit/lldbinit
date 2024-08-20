@@ -2,8 +2,10 @@ These are just simple anti-debugging examples to test the anti-anti-debugging ll
 
 Build them and run under lldb with the `antidebug` command on and off.
 
-List:
+Available tests:
+
 * sysctlantidebug: test the P_TRACED flag from classic AmIBeingDebugged example
+* ptrace: ptrace PT_DENY_ATTACH example
 
 To test under lldb, start the target with `process launch -s` and execute the `antidebug` command on `_dyld_start` first breakpoint.
 Resume execution and the anti-debug test shouldn't detect the debugger if everything went ok.
