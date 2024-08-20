@@ -10,6 +10,7 @@
 #include <mach/host_priv.h>
 #include <mach/mach.h>
 #include <mach/host_special_ports.h>
+#include "TargetConditionals.h"
 
 int remove_debugger() {
     mach_port_t service;
@@ -52,7 +53,11 @@ int remove_debugger() {
         exception_mask,
         service,
         EXCEPTION_STATE,
+#if TARGET_CPU_X86_64
         x86_THREAD_STATE64
+#elif TARGET_CPU_ARM64
+        ARM_THREAD_STATE64
+#endif
     );
     if (kr != KERN_SUCCESS) {
         printf("task_set_exception_ports: %s\n", mach_error_string(kr));
