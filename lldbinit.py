@@ -765,6 +765,7 @@ ANTIDEBUG_SYSCTL_OBJS = []
 # and we simply remove the P_TRACED flag if it exists
 def antidebug_callback_step2(frame, bp_loc, dict):
     global ANTIDEBUG_SYSCTL_OBJS
+    # print("[+] Hit antidebug_callback_step2")
     for i in ANTIDEBUG_SYSCTL_OBJS:
         #print(hex(i))
         ANTIDEBUG_SYSCTL_OBJS.remove(i)
@@ -794,61 +795,70 @@ def antidebug_callback_step2(frame, bp_loc, dict):
 # where the debug flag is removed
 def antidebug_callback_step1(frame, bp_loc, dict):
     global ANTIDEBUG_SYSCTL_OBJS
+    error = lldb.SBError()
+
     if frame is None:
         return 0
+    
     target = get_target()
-    rdi = int(frame.FindRegister('rdi').GetValue(), 16)
-    error = lldb.SBError()
-    mib0 = get_process().ReadUnsignedFromMemory(rdi, 4, error)
+    if is_x64():
+        src_reg = "rdi"
+        dst_reg = "rdx"
+    elif is_arm():
+        src_reg = "x0"
+        dst_reg = "x2"
+    else:
+        print("[-] error: unsupported architecture")
+        return 0
+    
+    mib_addr = int(frame.FindRegister(src_reg).GetValue(), 16)
+
+    mib0 = get_process().ReadUnsignedFromMemory(mib_addr, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib0")
         return
-    mib1 = get_process().ReadUnsignedFromMemory(rdi+4, 4, error)
+    mib1 = get_process().ReadUnsignedFromMemory(mib_addr+4, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib1")
         return
-    mib2 = get_process().ReadUnsignedFromMemory(rdi+8, 4, error)
+    mib2 = get_process().ReadUnsignedFromMemory(mib_addr+8, 4, error)
     if not error.Success():
         print("[-] error: failed to read mib2")
         return
     # check if it's a potential AmIBeingDebugged request
     # it's a common request from some apps
     # so we need to verify on the return and remove the flag
+    # CTL_KERN (1) - KERN_PROC (14) - KERN_PROC_PID (1)
     if mib0 == 1 and mib1 == 14 and mib2 == 1:
         print("[+] Hit sysctl antidebug request")
-        rdx = int(frame.FindRegister('rdx').GetValue(), 16)
-        if rdx == 0:
-            print("[!] warning: rdx == 0")
+        # the pointer to the sysctl output oldp
+        oldp = int(frame.FindRegister(dst_reg).GetValue(), 16)
+        if oldp == 0:
+            print("[!] warning: oldp == 0")
             get_process().Continue()
-        ANTIDEBUG_SYSCTL_OBJS.append(rdx)
+        ANTIDEBUG_SYSCTL_OBJS.append(oldp)
         # set a temporary breakpoint on the ret
         # temporary because we can't sync this with other sysctl calls
         mem_sbaddr = lldb.SBAddress(int(frame.FindRegister('pc').GetValue(), 16), target)
-        instructions_mem = target.ReadInstructions(mem_sbaddr, 64, "intel")
-        for mem_inst in instructions_mem:
-            #print(hex(mem_inst.addr.GetLoadAddress(target)), mem_inst.mnemonic)
-            if mem_inst.GetMnemonic(target) == 'ret':
-                breakpoint = target.BreakpointCreateByAddress(mem_inst.addr.GetLoadAddress(target))
-                breakpoint.SetOneShot(True)
-                breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
-                breakpoint.SetScriptCallbackFunction('lldbinit.antidebug_callback_step2')
+        # flavor only relevant for x86, ignored when aarch64
+        inst = target.ReadInstructions(mem_sbaddr, 64, "intel")
+        for i in inst:
+            # print(hex(i.addr.GetLoadAddress(target)), i.mnemonic)
+            # the properties seem broken in newer lldb versions because this will fail
+            # if we use i.mnemonic - the SBTarget will be NULL
+            # what's going on with lldb regressions?
+            # x64 - ret ; aarch64 - retab
+            if i.GetMnemonic(target).startswith('ret'):
+                # print(hex(i.addr.GetLoadAddress(target)), i.GetMnemonic(target))
+                nextbp = target.BreakpointCreateByAddress(i.GetAddress().GetLoadAddress(target))
+                nextbp.SetOneShot(True)
+                nextbp.SetThreadID(get_frame().GetThread().GetThreadID())
+                # this will generate a traceback on newer lldb versions
+                # it seems we can't set another callback while inside a callback
+                # lldb regressions ftw...
+                nextbp.SetScriptCallbackFunction('lldbinit.antidebug_callback_step2')
     # everything automatic here so continue in any case
     get_process().Continue()
-
-def taskexception_callback(frame, bp_loc, dict):
-    if frame is None:
-        return 0
-    print("[+] Hit task_set_exception_ports request")
-    target = get_target()
-    thread = frame.GetThread()
-    # the SBValue to ReturnFromFrame must be eValueTypeRegister type
-    # if we do a lldb.SBValue() we can't set to that type
-    # so we need to make a copy
-    # can we use FindRegister() from frame?
-    return_value = frame.reg["rax"]
-    return_value.value = str(0)
-    thread.ReturnFromFrame(frame, return_value)
-    #get_process().Continue()
 
 def cmd_antidebug(debugger, command, result, dict):
     '''Enable anti-anti-debugging. Use \'antidebug help\' for more information.'''
@@ -865,19 +875,14 @@ Syntax: antidebug
         print(help)
         return
 
-    if is_arm():
-        print("[-] error: unsupported architecture for this command.")
-        return
-
     target = get_target()
     for m in target.module_iter():
         # print(m.file.fullpath)
         if m.file.fullpath == "/usr/lib/dyld":
             breakpoint = target.BreakpointCreateByName("sysctl", '/usr/lib/system/libsystem_c.dylib')
             breakpoint.SetScriptCallbackFunction('lldbinit.antidebug_callback_step1')
-            #breakpoint2 = target.BreakpointCreateByName("task_set_exception_ports", '/usr/lib/system/libsystem_kernel.dylib')
-            #breakpoint2.SetScriptCallbackFunction('lldbinit.taskexception_callback')
             break
+    print("[+] Enabled anti-anti-debugging measures")
 
 # the callback for the specific module loaded breakpoint
 # supports x64, i386, arm64
