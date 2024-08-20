@@ -386,9 +386,6 @@ def __lldb_init_module(debugger, internal_dict):
     # skip/step current instruction commands
     ci.HandleCommand("command script add -h '(lldbinit) Skip current instruction.' -f lldbinit.cmd_skip skip", res)
     ci.HandleCommand("command script add -h '(lldbinit) Step over calls and loop instructions.' -f lldbinit.cmd_stepo stepo", res)
-    # load breakpoints from file
-    ci.HandleCommand("command script add -h '(lldbinit) Load breakpoints from file.' -f lldbinit.cmd_LoadBreakPoints lb", res)
-    ci.HandleCommand("command script add -h '(lldbinit) Load breakpoints from file.' -f lldbinit.cmd_LoadBreakPointsRva lbrva", res)
     # cracking friends
     ci.HandleCommand("command script add -h '(lldbinit) Return from current function.' -f lldbinit.cmd_crack crack", res)
     ci.HandleCommand("command script add -h '(lldbinit) Set a breakpoint and return from that function.' -f lldbinit.cmd_crackcmd crackcmd", res)
@@ -1968,76 +1965,6 @@ Syntax: stepo
         target.GetProcess().Continue()
     else:
         get_process().selected_thread.StepInstruction(False)
-
-# XXX: help
-def cmd_LoadBreakPointsRva(debugger, command, result, dict):
-    global  GlobalOutputList
-    GlobalOutputList = []
-    '''
-    frame = get_frame();
-        target = lldb.debugger.GetSelectedTarget();
-
-        nummods = target.GetNumModules();
-        #for x in range (0, nummods):
-        #       mod = target.GetModuleAtIndex(x);
-        #       #print(dir(mod));
-        #       print(target.GetModuleAtIndex(x));              
-        #       for sec in mod.section_iter():
-        #               addr = sec.GetLoadAddress(target);
-        #               name = sec.GetName();
-        #               print(hex(addr));
-
-        #1st module is executable
-        mod = target.GetModuleAtIndex(0);
-        sec = mod.GetSectionAtIndex(0);
-        loadaddr = sec.GetLoadAddress(target);
-        if loadaddr == lldb.LLDB_INVALID_ADDRESS:
-                sec = mod.GetSectionAtIndex(1);
-                loadaddr = sec.GetLoadAddress(target);
-        print(hex(loadaddr));
-    '''
-
-    target = get_target()
-    mod = target.GetModuleAtIndex(0)
-    sec = mod.GetSectionAtIndex(0)
-    loadaddr = sec.GetLoadAddress(target)
-    if loadaddr == lldb.LLDB_INVALID_ADDRESS:
-        sec = mod.GetSectionAtIndex(1)
-        loadaddr = sec.GetLoadAddress(target)
-    try:
-        f = open(command, "r")
-    except OSError:
-        return
-    while True:
-        line = f.readline()
-        if not line: 
-            break
-        line = line.rstrip()
-        if not line: 
-            break
-        # XXX: long() doesn't exist in p3
-        debugger.HandleCommand("breakpoint set -a " + hex(loadaddr + long(line, 16)))
-    f.close()
-
-
-# XXX: help
-def cmd_LoadBreakPoints(debugger, command, result, dict):
-    global GlobalOutputList
-    GlobalOutputList = []
-
-    try:
-        f = open(command, "r")
-    except OSError:
-        return
-    while True:
-        line = f.readline()
-        if not line:
-            break
-        line = line.rstrip()
-        if not line:
-            break
-        debugger.HandleCommand("breakpoint set --name " + line)
-    f.close()
 
 # Temporarily breakpoint next instruction - this is useful to skip loops (don't want to use stepo for this purpose)
 def cmd_bpn(debugger, command, result, dict):
