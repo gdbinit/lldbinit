@@ -4,7 +4,7 @@ Build them and run under lldb with the `antidebug` command on and off.
 
 Available tests:
 
-* sysctlantidebug: test the P_TRACED flag from classic AmIBeingDebugged example
+* sysctl: test the P_TRACED flag from classic AmIBeingDebugged example
 * ptrace: ptrace PT_DENY_ATTACH example
 * taskget: debugger detection via mach exception ports
 * taskset: get rid of the debugger by setting the exception port
