@@ -13,7 +13,7 @@ Original lldbinit code by Deroko @ https://github.com/deroko/lldbinit
 gdbinit available @ https://github.com/gdbinit/Gdbinit
 
 (c) Deroko 2014, 2015, 2016  
-(c) fG! 2017-2023 - reverser@put.as - https://reverse.put.as
+(c) fG! 2017-2024 - reverser@put.as - https://reverse.put.as
 
 No original license by Deroko.
 
@@ -35,11 +35,15 @@ Peter Nguyen maintains a [forked version](https://github.com/peternguyen93/lldbi
 [lisa.py](https://github.com/ant4g0nist/lisa.py) is also another good contender although focused on exploit dev.
 
 
-### What's new in version 3.1beta
+### What's new in version 3.1
 
 * Disassembly comments like [x64dbg](https://x64dbg.com) and breakpoint sessions (to save and restore breakpoints).
 
 * Bug fixes and small improvements.
+
+* Merged further anti-anti-debugging and ARM64 by mnrkbys and added tests/examples
+
+* Workarounds for some newer lldb regressions
 
 Check `MANUAL.md` for details about these new features. Please submit issues with any bugs and ideas/suggestions for these features. I tried to find the best balance but certain lldb constraints are annoying here.
 
@@ -71,7 +75,7 @@ Check `MANUAL.md` for details about these new features. Please submit issues wit
 
 Supports x86_64, i386, and arm64 targets. The i386 target as long been deprecated in macOS but supporting for now isn't a lot extra work and I hate when tools don't work when you need them (such as reversing old malware or cracking old stuff).
 
-Tested with Xcode 9.4.1, 10.x, 12.x, 14.x (x86_64 and arm64). Python 2.x and 3.x compatible.
+Tested with Xcode 9.4.1, 10.x, 12.x, 14.x, 15.x (x86_64 and arm64). Python 2.x and 3.x compatible.
 
 Optional Keystone Engine (https://www.keystone-engine.org) can be installed for assembler support.
 
