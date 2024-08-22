@@ -62,19 +62,20 @@ KNOWN BUGS:
 if __name__ == "__main__":
     print("Run only as script from LLDB... Not as standalone program!")
 
-import lldb    
-import sys
-import re
-import os
-import time
-import struct
 import argparse
+import fcntl
+import hashlib
+import json
+import os
+import re
+import struct
 import subprocess
+import sys
 import tempfile
 import termios
-import fcntl
-import json
-import hashlib
+import time
+
+import lldb
 
 try:
     import keystone
@@ -354,6 +355,7 @@ def __lldb_init_module(debugger, internal_dict):
     ci.HandleCommand("command script add -h '(lldbinit) Clear all module load breakpoints.' -f lldbinit.cmd_bmc bmc", res)
     ci.HandleCommand("command script add -h '(lldbinit) List all on module load breakpoints.' -f lldbinit.cmd_bml bml", res)
     ci.HandleCommand("command script add -h '(lldbinit) Enable anti-anti-debugging measures.' -f lldbinit.cmd_antidebug antidebug", res)
+    ci.HandleCommand("command script add -h '(lldbinit) Enable anti-anti-debugging measures.' -f lldbinit.cmd_antidebug_syscall antidebug_syscall", res)
     ci.HandleCommand("command script add -h '(lldbinit) Print all images available at gdb_image_notifier() breakpoint.' -f lldbinit.cmd_print_notifier_images print_images", res)
     # disable a breakpoint or all
     ci.HandleCommand("command script add -h '(lldbinit) Disable a breakpoint.' -f lldbinit.cmd_bpd bpd", res)
@@ -927,6 +929,80 @@ Syntax: antidebug
             bp4.SetScriptCallbackFunction("lldbinit.antidebug_task_exception_ports_callback")
             print("[+] Enabled anti-anti-debugging measures")
             break
+
+
+def antidebug_syscall_callback(frame, bp_loc, dict):
+    SYSCALL_PTRACE = 0x200001a
+    PT_DENY_ATTACH = 0x1f
+    error = lldb.SBError()
+    if is_x64():
+        pc_reg = "rip"
+        arg_val = get_gp_register("rdi")
+        syscall_num = get_gp_register("rax")
+    elif is_arm():
+        pc_reg = "pc"
+        arg_val = get_gp_register("x0")
+        syscall_num = get_gp_register("x16")
+
+    if syscall_num == SYSCALL_PTRACE and arg_val == PT_DENY_ATTACH:
+        print("[+] Hit syscall/svc anti-debug request")
+        # Jump to next instruction address
+        cur_addr = get_gp_register(pc_reg)
+        next_addr = cur_addr + get_inst_size(cur_addr)
+        result = frame.registers[0].GetChildMemberWithName(pc_reg).SetValueFromCString(str(next_addr), error)
+        if not result:
+            print("[-] error: failed to write to {} register".format(pc_reg))
+            return 0
+    get_process().Continue()
+
+
+def cmd_antidebug_syscall(debugger, command, result, dict):
+    '''Enable anti-anti-debugging syscall. Use \'antidebug_syscall help\' for more information.'''
+    help = """
+Enable anti-anti-debugging measures for syscall/svc.
+Bypasses debugger detection via syscall (x64) / svc (ARM).
+
+Syntax: antidebug_syscall
+"""
+    cmd = command.split()
+    if len(cmd) > 0 and cmd[0] == "help":
+        print(help)
+        return
+
+    target = get_target()
+    loaded_program = target.modules[0]
+    for segment in loaded_program.section_iter():
+        if segment.GetName() == "__TEXT":
+            text_segment = segment
+            break
+
+    text_section = text_segment.FindSubSection("__text")
+    section_start = text_section.GetLoadAddress(target)
+    section_end = section_start + text_section.GetByteSize()
+    if DEBUG:
+        print("section_start: 0x{:x}".format(section_start))
+        print("section_end: 0x{:x}".format(section_end))
+
+    cur_addr = section_start
+    if is_x64():
+        syscall_mnemonic = "syscall"
+    elif is_arm():
+        syscall_mnemonic = "svc"
+
+    while cur_addr < section_end:
+        inst = get_mnemonic(cur_addr)
+        op = get_operands(cur_addr)
+        if DEBUG:
+            print("inst: {}, op: {}".format(inst, op))
+
+        if inst == syscall_mnemonic:
+            if is_arm() and op != "#0":
+                continue
+            print("[+] Found {} at: 0x{:x}".format(inst, cur_addr))
+            bp = target.BreakpointCreateByAddress(cur_addr)
+            bp.SetScriptCallbackFunction("lldbinit.antidebug_syscall_callback")
+        cur_addr += get_inst_size(cur_addr)
+
 
 # the callback for the specific module loaded breakpoint
 # supports x64, i386, arm64
