@@ -13,7 +13,7 @@ Original lldbinit code by Deroko @ https://github.com/deroko/lldbinit
 gdbinit available @ https://github.com/gdbinit/Gdbinit
 
 (c) Deroko 2014, 2015, 2016  
-(c) fG! 2017-2024 - reverser@put.as - https://reverse.put.as
+(c) fG! 2017-2025 - reverser@put.as - https://reverse.put.as
 
 No original license by Deroko.
 
@@ -34,6 +34,26 @@ Peter Nguyen maintains a [forked version](https://github.com/peternguyen93/lldbi
 
 [lisa.py](https://github.com/ant4g0nist/lisa.py) is also another good contender although focused on exploit dev.
 
+
+### What's new in version 3.2 (January 2025)
+
+* New sessions format. Breaks compatibility with previous format. Sorry!
+
+* Temporary hardware breakpoints and command to step over using hardware breakpoints.
+
+* Commands to list and suspend threads.
+
+* Display breakpoint number when adding new breakpoints.
+
+* Additional information added to breakpoint list command.
+
+* Improve commands help.
+
+* Code formatting fixes.
+
+* Fix arm64 command. Thanks dkmcgrath!
+
+* Replace uuid property with GetUUIDString() method.
 
 ### What's new in version 3.1
 

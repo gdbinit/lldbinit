@@ -1,3 +1,24 @@
+v3.2 - 11/01/2025
+-----------------
+
+* New sessions format. Breaks compatibility with previous format. Sorry!
+
+* Temporary hardware breakpoints and command to step over using hardware breakpoints.
+
+* Commands to list and suspend threads.
+
+* Display breakpoint number when adding new breakpoints.
+
+* Additional information added to breakpoint list command.
+
+* Improve commands help.
+
+* Code formatting fixes.
+
+* Fix arm64 command. Thanks dkmcgrath!
+
+* Replace uuid property with GetUUIDString() method.
+
 v3.1beta - 25/12/2023
 ---------------------
 
