@@ -84,7 +84,7 @@ except ImportError:
     pass
 
 VERSION = "3.2"
-BUILD = "436"
+BUILD = "438"
 
 #
 # User configurable options
@@ -229,8 +229,6 @@ old_arm64 = {"x0":0,"x1":0,"x2":0,"x3":0,"x4":0,"x5":0,"x6":0,"x7":0,"x8":0,"x9"
               "x11":0,"x12":0,"x13":0,"x14":0,"x15":0,"x16":0,"x17":0,"x18":0,"x19":0,"x20":0,
               "x21":0,"x22":0,"x23":0,"x24":0,"x25":0,"x26":0,"x27":0,"x28":0,"fp":0,"lr":0,
               "sp":0,"pc":0,"cpsr":0}
-
-GlobalListOutput = []
 
 int3patches = {}
 
@@ -869,10 +867,10 @@ def cmd_contextcodesize(debugger, command, result, dict):
 # Color and output related commands
 # ---------------------------------
 
-# append data to the output that we display at the end of the hook-stop
+# this was used to append data to a global string and then output at the end of hook-stop
+# replace it with direct print since I don't see any more usage to it
 def output(x):
-    global GlobalListOutput
-    GlobalListOutput.append(x)
+    print(x, end='')
 
 # ---------------------------------
 # Threads related commands
@@ -2590,8 +2588,6 @@ def cmd_db(debugger, command, result, dict):
         ],
         "notes": ["Expressions are supported, do not use spaces between operators."],
     }
-    global GlobalListOutput
-    GlobalListOutput = []
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
@@ -2632,7 +2628,6 @@ def cmd_db(debugger, command, result, dict):
     membuf = get_process().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
-        result.PutCString("".join(GlobalListOutput))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         return
 
@@ -2674,7 +2669,6 @@ def cmd_db(debugger, command, result, dict):
     # put output into the print buffer
     output(hex_str)
 
-    result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display word values and ASCII characters
@@ -2691,8 +2685,6 @@ def cmd_dw(debugger, command, result, dict):
         ],
         "notes": ["Expressions are supported, do not use spaces between operators."],
     }
-    global GlobalListOutput
-    GlobalListOutput = []
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
@@ -2736,7 +2728,6 @@ def cmd_dw(debugger, command, result, dict):
     membuf = get_process().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
-        result.PutCString("".join(GlobalListOutput))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         return
 
@@ -2759,7 +2750,6 @@ def cmd_dw(debugger, command, result, dict):
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display dword values and ASCII characters
@@ -2776,8 +2766,6 @@ def cmd_dd(debugger, command, result, dict):
         ],
         "notes": ["Expressions are supported, do not use spaces between operators."],
     }
-    global GlobalListOutput
-    GlobalListOutput = []
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
@@ -2821,7 +2809,6 @@ def cmd_dd(debugger, command, result, dict):
     membuf = get_process().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
-        result.PutCString("".join(GlobalListOutput))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         return
     if POINTER_SIZE == 4:
@@ -2842,7 +2829,6 @@ def cmd_dd(debugger, command, result, dict):
             output("\n")
         index += 0x10
         dump_addr += 0x10
-    result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display quad values
@@ -2859,8 +2845,6 @@ def cmd_dq(debugger, command, result, dict):
         ],
         "notes": ["Expressions are supported, do not use spaces between operators."],
     }
-    global GlobalListOutput
-    GlobalListOutput = []
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
@@ -2904,7 +2888,6 @@ def cmd_dq(debugger, command, result, dict):
     membuf = get_process().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
-        result.PutCString("".join(GlobalListOutput))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
         return
 
@@ -2926,7 +2909,6 @@ def cmd_dq(debugger, command, result, dict):
             output("\n")
         index += 0x20
         dump_addr += 0x20
-    result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # thx poupas :-)
@@ -2989,9 +2971,6 @@ def cmd_findmem(debugger, command, result, dict):
  -c specify if you want to find N occurances (default is all)
  -v verbose output
  """
-
-    global GlobalListOutput
-    GlobalListOutput = []
 
     arg = str(command)
     parser = argparse.ArgumentParser(prog="findmem")
@@ -3076,7 +3055,6 @@ def cmd_findmem(debugger, command, result, dict):
         membuf = process.ReadMemory(mem_start, mem_size, err)
         if not err.Success():
             # output(str(err));
-            # result.PutCString("".join(GlobalListOutput));
             continue
         off = 0
         base_displayed = 0
@@ -3094,8 +3072,6 @@ def cmd_findmem(debugger, command, result, dict):
                 count = count - 1
             # the offset is relative to the slice start
             off = idx
-
-            GlobalListOutput = []
 
             if POINTER_SIZE == 4:
                 ptrformat = "0x%.08X"
@@ -3123,7 +3099,6 @@ def cmd_findmem(debugger, command, result, dict):
             module = file_sbaddr.module
             module_name = module.file.fullpath
             output(" off : 0x%.08X %s (%s)" % (off, mem_name, module_name))
-            print("".join(GlobalListOutput))
             # set the slice pointer for next search
             start_search = idx + len(search_string)
     return
@@ -4215,9 +4190,6 @@ def cmd_DumpInstructions(debugger, command, result, dict):
     """Dump instructions at certain address (SoftICE like u command style)."""
     help = """ """
 
-    global GlobalListOutput
-    GlobalListOutput = []
-
     target = get_target()
     cmd = command.split()
     if len(cmd) == 0 or len(cmd) > 2:
@@ -4236,7 +4208,6 @@ def cmd_DumpInstructions(debugger, command, result, dict):
             return
         disassemble(address, count)
 
-    result.PutCString("".join(GlobalListOutput))
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # return the SBInstruction at input address
@@ -4414,6 +4385,9 @@ def disassemble(start_address, nrlines):
 
         comment = ""
         # start at lldb automatic comments, if available
+        # XXX: this might return bad characters and breaks the output when using the old PutCString() method
+        #      only valid for older lldb versions?
+        # XXX: might want to set a warning if this happens?
         if file_inst.GetComment(target) != "":
             comment = " ; " + file_inst.GetComment(target)
 
@@ -5672,7 +5646,6 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     global g_home
     global g_target_hash
     global g_sessionfile
-    global GlobalListOutput
     global CONFIG_DISPLAY_STACK_WINDOW
     global CONFIG_DISPLAY_FLOW_WINDOW
     global POINTER_SIZE
@@ -5803,8 +5776,6 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
                 # we assume there is only one breakpoint name
                 bp_name = names.GetStringAtIndex(0)
 
-    GlobalListOutput = []
-
     output(COLOR_SEPARATOR + "[ TiD:{:^3d} ]".format(thread.GetIndexID()))
     output(COLOR_SEPARATOR + header_sep)
 
@@ -5837,10 +5808,8 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # XXX: find a better place for this - or maybe not
     if bp_name != "":
         output("\nBreakpoint name: " + bp_name)
-    # XXX: do we really need to output all data into the array and then print it in a single go? faster to just print directly?
-    # was it done this way because previously disassembly was capturing the output and modifying it?
-    data = "".join(GlobalListOutput)
-    result.PutCString(data)
+    # final newline to get correct prompt
+    output("\n")
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
     # if DEBUG:
     #   print("{} seconds".format(time.time() - start_time))
