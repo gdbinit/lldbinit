@@ -3759,7 +3759,7 @@ def dump_conditionalaarch64(cpsr):
             # x = re.search('([a-z0-9]{2,3})', operands)
             # extract each operand - they are comma separated
             # cb have two, tb three operands
-            x = re.findall("[^,\s]+", operands)
+            x = re.findall("[^,\\s]+", operands)
             # if we can't read the operands it's an error
             if x is None:
                 return taken, reason
