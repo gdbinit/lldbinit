@@ -58,6 +58,8 @@ KNOWN BUGS:
 -----------
 
 """
+# python 2.x doesn't have the end option so we need this
+from __future__ import print_function
 
 if __name__ == "__main__":
     print("Run only as script from LLDB... Not as standalone program!")
@@ -84,7 +86,7 @@ except ImportError:
     pass
 
 VERSION = "3.2"
-BUILD = "438"
+BUILD = "441"
 
 #
 # User configurable options
@@ -1017,7 +1019,7 @@ def antidebug_callback_step1(frame, bp_loc, dict):
         # and we don't want to tamper with the rest of the results - just with the P_TRACED flag
         mem_sbaddr = lldb.SBAddress(int(frame.FindRegister("pc").GetValue(), 16), target)
         # flavor only relevant for x86, ignored when aarch64
-        inst = target.ReadInstructions(mem_sbaddr, 64, "intel")
+        inst = target.ReadInstructions(mem_sbaddr, 64)
         for i in inst:
             # print(hex(i.GetAddress().GetLoadAddress(target)), i.GetMnemonic(target))
             # the properties seem broken in newer lldb versions because this will fail
@@ -4215,7 +4217,7 @@ def get_instruction(target_addr):
     err = lldb.SBError()
     target = get_target()
     # flavor argument only relevant to x86 targets - seems to work with ARM anyway
-    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, "intel")
+    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
         return lldb.SBInstruction()
@@ -4226,7 +4228,7 @@ def get_mnemonic(target_addr):
     err = lldb.SBError()
     target = get_target()
     # flavor argument only relevant to x86 targets - seems to work with ARM anyway
-    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, "intel")
+    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
         return ""
@@ -4244,7 +4246,7 @@ def get_operands(src_address):
     # needs to be this way to workaround SBAddress init bug
     src_sbaddr = lldb.SBAddress()
     src_sbaddr.SetLoadAddress(src_address, target)
-    instruction_list = target.ReadInstructions(src_sbaddr, 1, "intel")
+    instruction_list = target.ReadInstructions(src_sbaddr, 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
         return ""
@@ -4256,7 +4258,7 @@ def get_inst_size(target_addr):
     err = lldb.SBError()
     target = get_target()
 
-    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1, "intel")
+    instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
         return 0
@@ -4295,8 +4297,8 @@ def disassemble(start_address, nrlines):
     # bug on SBAddress init implementation???
     # this also has problems with symbols - the memory version doesn't have them
     # flavor argument only relevant to x86 targets - works fine with ARM like this
-    instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines, CONFIG_FLAVOR)
-    instructions_file = target.ReadInstructions(file_sbaddr, nrlines, CONFIG_FLAVOR)
+    instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines)
+    instructions_file = target.ReadInstructions(file_sbaddr, nrlines)
     if instructions_mem.GetSize() != instructions_file.GetSize():
         err_msg("Instructions arrays sizes are different.")
         return
@@ -4952,7 +4954,7 @@ def display_indirect_flow():
 # find out the target address of ret, and indirect call and jmp
 def get_indirect_flow_address(src_addr):
     target = get_target()
-    instruction_list = target.ReadInstructions(lldb.SBAddress(src_addr, target), 1, "intel")
+    instruction_list = target.ReadInstructions(lldb.SBAddress(src_addr, target), 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
         return -1
@@ -5764,9 +5766,21 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     thread = frame.GetThread()
     stop_reason = thread.GetStopReason()
     if stop_reason == lldb.eStopReasonBreakpoint:
-        if thread.GetStopReasonDataCount() > 0:
+        total = thread.GetStopReasonDataCount()
+        if total > 0:
+            n = 0
+            # the available data will be in pairs when stop reason is a breakpoint
+            # internal lldb breakpoints appear in the UI as negative but the function returns uint64_t
+            # so we have big numbers here for those
+            while n < total:
             # this gives us the breakpoint id
-            bp_id = thread.GetStopReasonDataAtIndex(0)
+                bp_id = thread.GetStopReasonDataAtIndex(n)
+                n += 2
+                # skip the internal breakpoints
+                # to avoid any other internal breakpoints just skip anything over half the big number
+                # which is itself a huge number given we are not going to set that many breakpoints :-)
+                if bp_id > 0xFFFFFFFFFFFFFFFF/2:
+                    continue
             # now we can try to locate it
             bpx = target.FindBreakpointByID(bp_id)
             # and build the names list
@@ -5807,7 +5821,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     output(COLOR_SEPARATOR + bottom_sep + RESET)
     # XXX: find a better place for this - or maybe not
     if bp_name != "":
-        output("\nBreakpoint name: " + bp_name)
+        output(COLOR_CURRENT_PC + "\nBreakpoint name: " + RESET + bp_name)
     # final newline to get correct prompt
     output("\n")
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
