@@ -4,7 +4,7 @@
 | | | . | . | |   | |  _|
 |_|_|___|___|_|_|_|_|_|
 
-lldbinit v3.2
+lldbinit v3.3
 A gdbinit clone for LLDB aka how to make LLDB a bit more useful and less crappy
 
 Available at https://github.com/gdbinit/lldbinit
@@ -12,13 +12,13 @@ Original lldbinit code by Deroko @ https://github.com/deroko/lldbinit
 gdbinit available @ https://github.com/gdbinit/Gdbinit
 
 (c) Deroko 2014, 2015, 2016
-(c) fG! 2017-2025 - reverser@put.as - https://reverse.put.as
+(c) fG! 2017-2026 - reverser@put.as - https://reverse.put.as
 
 No original license by Deroko.
 
 All my modifications are under MIT license:
 
-Copyright 2017-2025 Pedro Vilaca
+Copyright 2017-2026 Pedro Vilaca
 
 Permission is hereby granted, free of charge, to any person obtaining a
 copy of this software and associated documentation files (the "Software"),
@@ -54,8 +54,8 @@ Notes:
 ------
 Version 3.0+ drops support for ARM32 and assumes ARM64 instead
 
-KNOWN BUGS:
------------
+Version 3.3 drops support for lldb older than 3.5.2 (April 2015) since commands now use the SBExecutionContext
+Something that I missed all these years :-]
 
 """
 # python 2.x doesn't have the end option so we need this
@@ -85,8 +85,8 @@ except ImportError:
     CONFIG_KEYSTONE_AVAILABLE = 0
     pass
 
-VERSION = "3.2"
-BUILD = "441"
+VERSION = "3.3"
+BUILD = "453"
 
 #
 # User configurable options
@@ -574,7 +574,7 @@ def help_msg(help):
         print("")
 
 # just a silly shortcut - requires the command to have the help option
-def cmd_man(debugger, command, result, dict):
+def cmd_man(debugger, command, ctx, result, dict):
     cmd = command.split()
     if len(cmd) == 0:
         err_msg("The man command requires an argument.")
@@ -586,11 +586,11 @@ def cmd_man(debugger, command, result, dict):
     if res.GetErrorSize() > 0:
         err_msg("Requested man page for unknown command '{}'.".format(command))
 
-def cmd_banner(debugger, command, result, dict):
+def cmd_banner(debugger, command, ctx, result, dict):
     global LLDB_VARIANT, LLDB_MAJOR, LLDB_MINOR
     print("{}[+] Loaded lldbinit version {}.{} @ lldb-{}.{} ({} version){}".format(GREEN, VERSION, BUILD, LLDB_MAJOR, LLDB_MINOR, LLDB_VARIANT, RESET))
 
-def cmd_lldbinitcmds(debugger, command, result, dict):
+def cmd_lldbinitcmds(debugger, command, ctx, result, dict):
     """Display all available lldbinit commands."""
 
     help_table = [
@@ -687,7 +687,7 @@ def cmd_lldbinitcmds(debugger, command, result, dict):
     print("\nUse 'cmdname help' for extended command help.")
 
 # placeholder to make tests
-def cmd_tester(debugger, command, result, dict):
+def cmd_tester(debugger, command, ctx, result, dict):
     print("test")
     help = {
     "cmd": "tester",
@@ -727,7 +727,7 @@ def cmd_tester(debugger, command, result, dict):
 # Settings related commands
 # -------------------------
 
-def cmd_enable(debugger, command, result, dict):
+def cmd_enable(debugger, command, ctx, result, dict):
     """Enable certain lldb and lldbinit options. Use \'enable help\' for more information."""
     help = {
         "cmd": "enable",
@@ -781,7 +781,7 @@ def cmd_enable(debugger, command, result, dict):
 
     return
 
-def cmd_disable(debugger, command, result, dict):
+def cmd_disable(debugger, command, ctx, result, dict):
     """Disable certain lldb and lldbinit options. Use \'disable help\' for more information."""
     help = {
         "cmd": "disable",
@@ -834,7 +834,7 @@ def cmd_disable(debugger, command, result, dict):
         help_msg(help)
     return
 
-def cmd_contextcodesize(debugger, command, result, dict):
+def cmd_contextcodesize(debugger, command, ctx, result, dict):
     """Set the number of disassembly lines in code window. Use \'contextcodesize help\' for more information."""
     help = {
         "cmd": "contextcodesize",
@@ -855,7 +855,7 @@ def cmd_contextcodesize(debugger, command, result, dict):
         print("Current configuration value is: {:d}".format(CONFIG_DISASSEMBLY_LINE_COUNT))
         return
 
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
@@ -877,7 +877,7 @@ def output(x):
 # ---------------------------------
 # Threads related commands
 # ---------------------------------
-def cmd_listthreads(debugger, command, result, dict):
+def cmd_listthreads(debugger, command, ctx, result, dict):
     """List current threads. Use \'tl help\' for more information."""
     help = {
         "cmd": "tl",
@@ -890,7 +890,7 @@ def cmd_listthreads(debugger, command, result, dict):
         help_msg(help)
         return
 
-    proc = get_target().GetProcess()
+    proc = ctx.GetProcess()
 
     if proc.num_threads == 0:
         err_msg("No threads available. Is the target started?")
@@ -901,7 +901,7 @@ def cmd_listthreads(debugger, command, result, dict):
         index = thread.GetIndexID()
         print("ID: {} Number: {}".format(ID, index))
 
-def cmd_suspendthread(debugger, command, result, dict):
+def cmd_suspendthread(debugger, command, ctx, result, dict):
     """Suspend a thread. Use \'ts help\' for more information."""
     help = {
         "cmd": "ts",
@@ -920,13 +920,13 @@ def cmd_suspendthread(debugger, command, result, dict):
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value - only a thread index is valid.")
         help_msg(help)
         return
 
-    proc = get_target().GetProcess()
+    proc = ctx.GetProcess()
     thread = proc.GetThreadByIndexID(value)
     result = thread.Suspend()
     if result is False:
@@ -950,10 +950,10 @@ def antidebug_callback_step2(frame, bp_loc, dict):
         ANTIDEBUG_SYSCTL_OBJS.remove(i)
         # offset to kp_proc.p_flag - this should be stable
         offset = 0x20
-        target = get_target()
+        target = frame.GetThread().GetProcess().GetTarget()
         error = lldb.SBError()
         # read the current value so we can modify and write again
-        value = get_process().ReadUnsignedFromMemory(i + offset, 4, error)
+        value = frame.GetThread().GetProcess().ReadUnsignedFromMemory(i + offset, 4, error)
         # remove P_TRACED flag if it exists
         if value & P_TRACED:
             print("[+] Hit sysctl antidebug request")
@@ -964,7 +964,7 @@ def antidebug_callback_step2(frame, bp_loc, dict):
             if not error.Success():
                 err_msg("Failed to write memory at 0x{:x}.".format(i + offset))
                 return
-        get_process().Continue()
+        frame.GetThread().GetProcess().Continue()
 
 # the first step breakpoint callback of the sysctl antidebug bypass
 # this deals with the breakpoint at sysctl symbol
@@ -977,11 +977,11 @@ def antidebug_callback_step1(frame, bp_loc, dict):
     if frame is None:
         return 0
 
-    target = get_target()
-    if is_x64():
+    target = frame.GetThread().GetProcess().GetTarget()
+    if is_x64(target):
         src_reg = "rdi"
         dst_reg = "rdx"
-    elif is_arm():
+    elif is_arm(target):
         src_reg = "x0"
         dst_reg = "x2"
     else:
@@ -990,15 +990,15 @@ def antidebug_callback_step1(frame, bp_loc, dict):
 
     mib_addr = int(frame.FindRegister(src_reg).GetValue(), 16)
 
-    mib0 = get_process().ReadUnsignedFromMemory(mib_addr, 4, error)
+    mib0 = frame.GetThread().GetProcess().ReadUnsignedFromMemory(mib_addr, 4, error)
     if not error.Success():
         err_msg("Failed to read mib0.")
         return
-    mib1 = get_process().ReadUnsignedFromMemory(mib_addr + 4, 4, error)
+    mib1 = frame.GetThread().GetProcess().ReadUnsignedFromMemory(mib_addr + 4, 4, error)
     if not error.Success():
         err_msg("Failed to read mib1.")
         return
-    mib2 = get_process().ReadUnsignedFromMemory(mib_addr + 8, 4, error)
+    mib2 = frame.GetThread().GetProcess().ReadUnsignedFromMemory(mib_addr + 8, 4, error)
     if not error.Success():
         err_msg("Failed to read mib2.")
         return
@@ -1012,7 +1012,7 @@ def antidebug_callback_step1(frame, bp_loc, dict):
         oldp = int(frame.FindRegister(dst_reg).GetValue(), 16)
         if oldp == 0:
             print("[!] Warning: oldp == 0")
-            get_process().Continue()
+            frame.GetThread().GetProcess().Continue()
         ANTIDEBUG_SYSCTL_OBJS.append(oldp)
         # set a temporary breakpoint on the ret
         # temporary because we can't sync this with other sysctl calls
@@ -1030,28 +1030,30 @@ def antidebug_callback_step1(frame, bp_loc, dict):
                 # print(hex(i.addr.GetLoadAddress(target)), i.GetMnemonic(target))
                 nextbp = target.BreakpointCreateByAddress(i.GetAddress().GetLoadAddress(target))
                 nextbp.SetOneShot(True)
-                nextbp.SetThreadID(get_frame().GetThread().GetThreadID())
+                nextbp.SetThreadID(frame.GetThread().GetThreadID())
                 # this will generate a traceback on newer lldb versions
                 # it seems we can't set another callback while inside a callback
                 # lldb regressions ftw...
                 nextbp.SetScriptCallbackFunction("lldbinit.antidebug_callback_step2")
     # everything automatic here so continue in any case
-    get_process().Continue()
+    frame.GetThread().GetProcess().Continue()
 
 # bypass PT_DENY_ATTACH via ptrace() call
 def antidebug_ptrace_callback(frame, bp_loc, dict):
     PT_DENY_ATTACH = 31
     error = lldb.SBError()
-    if is_x64():
+    proc = frame.GetThread().GetProcess()
+    target = proc.GetTarget()
+    if is_x64(target):
         src_reg = "rdi"
-    elif is_arm():
+    elif is_arm(target):
         src_reg = "x0"
     request = int(frame.FindRegister(src_reg).GetValue(), 16)
     if request == PT_DENY_ATTACH:
         print("[+] Hit ptrace anti-debug request")
-        if is_x64():
+        if is_x64(target):
             src_reg = "rax"
-        elif is_arm():
+        elif is_arm(target):
             src_reg = "x0"
         # we are essentially bypassing the whole call to return a value of 0
         result = frame.registers[0].GetChildMemberWithName(src_reg).SetValueFromCString("0x0", error)
@@ -1059,28 +1061,30 @@ def antidebug_ptrace_callback(frame, bp_loc, dict):
             err_msg("Failed to write to {} register.".format(src_reg))
             return 0
         # and return immediately to the caller without executing any ptrace() code
-        get_thread().ReturnFromFrame(frame, frame.registers[0].GetChildMemberWithName(src_reg))
-    get_process().Continue()
+        frame.GetThread().ReturnFromFrame(frame, frame.registers[0].GetChildMemberWithName(src_reg))
+    proc.Continue()
 
 # debugger detection via the mach exception ports
 def antidebug_task_exception_ports_callback(frame, bp_loc, dict):
     if frame is None:
         return 0
-    if is_x64():
+    proc = frame.GetThread().GetProcess()
+    target = proc.GetTarget()
+    if is_x64(target):
         src_reg = "rsi"
-    elif is_arm():
+    elif is_arm(target):
         src_reg = "x1"
     exception_mask = int(frame.FindRegister(src_reg).GetValue(), 16)
     if exception_mask != 0x0:
-        print("[+] Hit {} antidebug request".format(get_frame().symbol.name))
+        print("[+] Hit {} antidebug request".format(frame.symbol.name))
         error = lldb.SBError()
         result = frame.registers[0].GetChildMemberWithName(src_reg).SetValueFromCString("0x0", error)
         if not result:
             err_msg("Failed to write to {} register.".format(src_reg))
             return 0
-    get_process().Continue()
+    proc.Continue()
 
-def cmd_antidebug(debugger, command, result, dict):
+def cmd_antidebug(debugger, command, ctx, result, dict):
     """Enable anti-anti-debugging. Use \'antidebug help\' for more information."""
     help = {
         "cmd": "antidebug",
@@ -1093,7 +1097,7 @@ def cmd_antidebug(debugger, command, result, dict):
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
     for m in target.module_iter():
         if m.file.fullpath == "/usr/lib/dyld":
             # sysctl
@@ -1120,10 +1124,12 @@ def module_breakpoint_callback(frame, bp_loc, dict):
         return 0
 
     error = lldb.SBError()
+    proc = frame.GetThread().GetProcess()
+    target = proc.GetTarget()
 
-    i386 = is_i386()
-    x64 = is_x64()
-    arm = is_arm()
+    i386 = is_i386(target)
+    x64 = is_x64(target)
+    arm = is_arm(target)
     if not i386 and not x64 and not arm:
         err_msg("Unsupported architecture.")
 
@@ -1142,7 +1148,7 @@ def module_breakpoint_callback(frame, bp_loc, dict):
         pc = frame.FindRegister("x0")
         mode = int(pc.GetValue(), 16)
     elif i386:
-        mode = get_process().ReadUnsignedFromMemory(sp + 4, 4, error)
+        mode = proc.ReadUnsignedFromMemory(sp + 4, 4, error)
         if not error.Success():
             err_msg("Failed to read mode from stack.")
             return
@@ -1150,7 +1156,7 @@ def module_breakpoint_callback(frame, bp_loc, dict):
     # only interested in new images
     # enum dyld_image_mode { dyld_image_adding=0, dyld_image_removing=1, dyld_image_info_change=2, dyld_image_dyld_moved=3 };
     if mode != 0:
-        get_process().Continue()
+        proc.Continue()
         return
 
     # infoCount argument
@@ -1161,7 +1167,7 @@ def module_breakpoint_callback(frame, bp_loc, dict):
         pc = frame.FindRegister("x1")
         infoCount = int(pc.GetValue(), 16)
     elif i386:
-        infoCount = get_process().ReadUnsignedFromMemory(sp + 8, 4, error)
+        infoCount = proc.ReadUnsignedFromMemory(sp + 8, 4, error)
         if not error.Success():
             err_msg("Failed to read infoCount from stack.")
             return
@@ -1174,7 +1180,7 @@ def module_breakpoint_callback(frame, bp_loc, dict):
         pc = frame.FindRegister("x2")
         info = int(pc.GetValue(), 16)
     elif i386:
-        info = get_process().ReadUnsignedFromMemory(sp + 12, 4, error)
+        info = proc.ReadUnsignedFromMemory(sp + 12, 4, error)
         if not error.Success():
             err_msg("Failed to read address from rdx.")
             return
@@ -1191,15 +1197,15 @@ def module_breakpoint_callback(frame, bp_loc, dict):
     hit = 0
     # go over all the images being added and try to found the ones we are interested in
     for x in range(infoCount):
-        address = get_process().ReadUnsignedFromMemory(info, readSize, error)
+        address = proc.ReadUnsignedFromMemory(info, readSize, error)
         if not error.Success():
             err_msg("Failed to read address from info structure:" + error)
             return
-        string_ptr = get_process().ReadUnsignedFromMemory(info + readSize, readSize, error)
+        string_ptr = proc.ReadUnsignedFromMemory(info + readSize, readSize, error)
         if not error.Success():
             err_msg("Failed to read string pointer from info structure.")
             return
-        string = get_process().ReadCStringFromMemory(string_ptr, 1024, error)
+        string = proc.ReadCStringFromMemory(string_ptr, 1024, error)
         if not error.Success():
             err_msg("Failed to read module name string.")
             return
@@ -1219,10 +1225,10 @@ def module_breakpoint_callback(frame, bp_loc, dict):
 
     # nothing found so we resume execution
     if hit == 0:
-        get_process().Continue()
+        proc.Continue()
 
 # breakpoint on specific module
-def cmd_bm(debugger, command, result, dict):
+def cmd_bm(debugger, command, ctx, result, dict):
     """Set breakpoint on specific module load. Use \'bm help\' for more information."""
     help = {
         "cmd": "bm",
@@ -1248,7 +1254,7 @@ at beginning of image notifier. Use \'print_images\' to show all images there.""
     modpath = " ".join([str(item) for item in cmd[0:]])
 
     found = 0
-    target = get_target()
+    target = ctx.GetTarget()
     for m in target.module_iter():
         # print(m.file.fullpath)
         if m.file.fullpath == "/usr/lib/dyld":
@@ -1286,7 +1292,7 @@ at beginning of image notifier. Use \'print_images\' to show all images there.""
         if found:
             break
 
-def cmd_bmc(debugger, command, result, dict):
+def cmd_bmc(debugger, command, ctx, result, dict):
     """Clear all breakpoints on specific module load. Use \'bmc help\' for more information."""
     help = {
         "cmd": "bmc",
@@ -1301,7 +1307,7 @@ def cmd_bmc(debugger, command, result, dict):
         return
     modules_list = []
 
-def cmd_bml(debugger, command, result, dict):
+def cmd_bml(debugger, command, ctx, result, dict):
     """List all breakpoints on module load."""
     help = {
         "cmd": "bml",
@@ -1321,7 +1327,7 @@ def cmd_bml(debugger, command, result, dict):
     for i in modules_list:
         print("- " + i)
 
-def cmd_print_notifier_images(debugger, command, result, dict):
+def cmd_print_notifier_images(debugger, command, ctx, result, dict):
     """Print all images available at gdb_image_notifier/lldb_image_notifier breakpoint."""
     help = {
         "cmd": "print_images",
@@ -1335,16 +1341,16 @@ def cmd_print_notifier_images(debugger, command, result, dict):
         help_msg(help)
         return
 
-    frame = get_frame()
+    frame = ctx.GetFrame()
     if frame is None:
         return 0
 
     error = lldb.SBError()
     # XXX: check that we are effectively at gdb_image_notifier address
-
-    i386 = is_i386()
-    x64 = is_x64()
-    arm = is_arm()
+    target = ctx.GetTarget()
+    i386 = is_i386(target)
+    x64 = is_x64(target)
+    arm = is_arm(target)
     if not i386 and not x64 and not arm:
         err_msg("Unsupported architecture.")
 
@@ -1365,7 +1371,7 @@ def cmd_print_notifier_images(debugger, command, result, dict):
         pc = frame.FindRegister("x0")
         mode = int(pc.GetValue(), 16)
     elif i386:
-        mode = get_process().ReadUnsignedFromMemory(sp + 4, 4, error)
+        mode = ctx.GetProcess().ReadUnsignedFromMemory(sp + 4, 4, error)
         if not error.Success():
             err_msg("Failed to read mode from stack.")
             return
@@ -1378,7 +1384,7 @@ def cmd_print_notifier_images(debugger, command, result, dict):
         pc = frame.FindRegister("x1")
         infoCount = int(pc.GetValue(), 16)
     elif i386:
-        infoCount = get_process().ReadUnsignedFromMemory(sp + 8, 4, error)
+        infoCount = ctx.GetProcess().ReadUnsignedFromMemory(sp + 8, 4, error)
         if not error.Success():
             err_msg("Failed to read infoCount from stack.")
             return
@@ -1391,7 +1397,7 @@ def cmd_print_notifier_images(debugger, command, result, dict):
         pc = frame.FindRegister("x2")
         info = int(pc.GetValue(), 16)
     elif i386:
-        info = get_process().ReadUnsignedFromMemory(sp + 12, 4, error)
+        info = ctx.GetProcess().ReadUnsignedFromMemory(sp + 12, 4, error)
         if not error.Success():
             err_msg("Failed to read address from rdx.")
             return
@@ -1411,15 +1417,15 @@ def cmd_print_notifier_images(debugger, command, result, dict):
     print("Loaded modules:")
     print("----------------------------------------------------------")
     for x in range(infoCount):
-        address = get_process().ReadUnsignedFromMemory(info, readSize, error)
+        address = ctx.GetProcess().ReadUnsignedFromMemory(info, readSize, error)
         if not error.Success():
             err_msg("Failed to read address from info structure.")
             return
-        string_ptr = get_process().ReadUnsignedFromMemory(info + readSize, readSize, error)
+        string_ptr = ctx.GetProcess().ReadUnsignedFromMemory(info + readSize, readSize, error)
         if not error.Success():
             err_msg("Failed to read string pointer from info structure.")
             return
-        string = get_process().ReadCStringFromMemory(string_ptr, 1024, error)
+        string = ctx.GetProcess().ReadCStringFromMemory(string_ptr, 1024, error)
         if not error.Success():
             err_msg("Failed to read module name string.")
             return
@@ -1435,7 +1441,7 @@ def cmd_print_notifier_images(debugger, command, result, dict):
 #
 # NOTE: this is straighforward breakpoint without conditions etc
 # user can always set conditions via regular commands
-def cmd_bp(debugger, command, result, dict):
+def cmd_bp(debugger, command, ctx, result, dict):
     """Set a software breakpoint."""
     help = {
         "cmd": "bp",
@@ -1457,7 +1463,7 @@ def cmd_bp(debugger, command, result, dict):
         help_msg(help)
         return
 
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
@@ -1469,16 +1475,16 @@ def cmd_bp(debugger, command, result, dict):
     if len(cmd) > 1:
         name = "_".join([str(item) for item in cmd[1:]])
 
-    target = get_target()
+    target = ctx.GetTarget()
     breakpoint = target.BreakpointCreateByAddress(value)
     if name != "":
         breakpoint.AddName(name)
 
-    print("[+] Software #{:d} breakpoint set at 0x{:x}".format(target.num_breakpoints, value))
+    print("[+] Software #{:d} breakpoint set at 0x{:x}".format(breakpoint.id, value))
     return
 
 # temporary software breakpoint
-def cmd_bpt(debugger, command, result, dict):
+def cmd_bpt(debugger, command, ctx, result, dict):
     """Set a temporary software breakpoint. Use \'bpt help\' for more information."""
     help = {
         "cmd": "bpt",
@@ -1497,21 +1503,21 @@ def cmd_bpt(debugger, command, result, dict):
         help_msg(help)
         return
 
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
     breakpoint = target.BreakpointCreateByAddress(value)
     breakpoint.SetOneShot(True)
-    breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
+    breakpoint.SetThreadID(ctx.GetThread().GetThreadID())
 
     print("[+] Temporary software breakpoint #{:d} set at 0x{:x}".format(target.num_breakpoints, value))
 
 # hardware breakpoint
-def cmd_bh(debugger, command, result, dict):
+def cmd_bh(debugger, command, ctx, result, dict):
     """Set an hardware breakpoint."""
     help = {
         "cmd": "bh",
@@ -1536,7 +1542,7 @@ def cmd_bh(debugger, command, result, dict):
         help_msg(help)
         return
 
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
@@ -1559,11 +1565,11 @@ def cmd_bh(debugger, command, result, dict):
     # if hardware breakpoints are not supported, the command only generates a warning
     # and no error is available in res, so we can't distinguish those cases
     # unless we parse output... meh, too much work to support old versions!
-    print("[+] Hardware breakpoint #{:d} set at 0x{:x}".format(get_target().num_breakpoints, value))
+    print("[+] Hardware breakpoint #{:d} set at 0x{:x}".format(ctx.GetTarget().num_breakpoints, value))
     return
 
 # temporary hardware breakpoint
-def cmd_bht(debugger, command, result, dict):
+def cmd_bht(debugger, command, ctx, result, dict):
     """Set a temporary hardware breakpoint."""
     help = {
         "cmd": "bht",
@@ -1581,7 +1587,7 @@ def cmd_bht(debugger, command, result, dict):
     if cmd[0] == "help":
         help_msg(help)
         return
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
@@ -1590,11 +1596,11 @@ def cmd_bht(debugger, command, result, dict):
     # the python API doesn't seem to support hardware breakpoints
     # so we set it via command line interpreter
     lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H --one-shot true -a {}".format(hex(value)), res)
-    print("[+] Temporary hardware breakpoint #{:d} set at 0x{:x}".format(get_target().num_breakpoints, value))
+    print("[+] Temporary hardware breakpoint #{:d} set at 0x{:x}".format(ctx.GetTarget().num_breakpoints, value))
     return
 
 # clear breakpoint number
-def cmd_bpc(debugger, command, result, dict):
+def cmd_bpc(debugger, command, ctx, result, dict):
     """Clear a breakpoint. Use \'bpc help\' for more information."""
     help = {
         "cmd": "bpc",
@@ -1619,13 +1625,13 @@ def cmd_bpc(debugger, command, result, dict):
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value - only a breakpoint number is valid.")
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
     for bpt in target.breakpoint_iter():
         if bpt.id == value:
             if target.BreakpointDelete(bpt.id) is False:
@@ -1639,7 +1645,7 @@ def cmd_bpc(debugger, command, result, dict):
 
 # disable breakpoint number
 # XXX: we could support addresses, not sure it's worth the trouble
-def cmd_bpd(debugger, command, result, dict):
+def cmd_bpd(debugger, command, ctx, result, dict):
     """Disable a breakpoint. Use \'bpd help\' for more information."""
     help = {
         "cmd": "bpd",
@@ -1664,13 +1670,13 @@ def cmd_bpd(debugger, command, result, dict):
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value - only a breakpoint number is valid.")
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
 
     for bpt in target.breakpoint_iter():
         if bpt.id == value and bpt.IsEnabled():
@@ -1678,7 +1684,7 @@ def cmd_bpd(debugger, command, result, dict):
             print("[+] Disabled breakpoint #{:d}".format(value))
 
 # disable all breakpoints
-def cmd_bpda(debugger, command, result, dict):
+def cmd_bpda(debugger, command, ctx, result, dict):
     """Disable all breakpoints. Use \'bpda help\' for more information."""
     help = {
         "cmd": "bpda",
@@ -1695,7 +1701,7 @@ def cmd_bpda(debugger, command, result, dict):
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
 
     if target.DisableAllBreakpoints() is False:
         err_msg("Failed to disable all breakpoints.")
@@ -1703,7 +1709,7 @@ def cmd_bpda(debugger, command, result, dict):
     print("[+] Disabled all breakpoints.")
 
 # enable breakpoint number
-def cmd_bpe(debugger, command, result, dict):
+def cmd_bpe(debugger, command, ctx, result, dict):
     """Enable a breakpoint. Use \'bpe help\' for more information."""
     help = {
         "cmd": "bpe",
@@ -1728,13 +1734,13 @@ def cmd_bpe(debugger, command, result, dict):
         return
 
     # breakpoint enable only accepts breakpoint numbers not addresses
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value - only a breakpoint number is valid.")
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
 
     for bpt in target.breakpoint_iter():
         if bpt.id == value and not bpt.IsEnabled():
@@ -1742,7 +1748,7 @@ def cmd_bpe(debugger, command, result, dict):
             print("[+] Enabled breakpoint #{:d}".format(value))
 
 # enable all breakpoints
-def cmd_bpea(debugger, command, result, dict):
+def cmd_bpea(debugger, command, ctx, result, dict):
     """Enable all breakpoints. Use \'bpea help\' for more information."""
     help = {
         "cmd": "bpea",
@@ -1759,7 +1765,7 @@ def cmd_bpea(debugger, command, result, dict):
         help_msg(help)
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
 
     if not target.EnableAllBreakpoints():
         err_msg("Failed to enable all breakpoints.")
@@ -1768,7 +1774,7 @@ def cmd_bpea(debugger, command, result, dict):
 
 # list all breakpoints
 # XXX: add option to display only the active breakpoints
-def cmd_bpl(debugger, command, result, dict):
+def cmd_bpl(debugger, command, ctx, result, dict):
     """List all breakpoints. Use \'bpl help\' for more information."""
     help = {
         "cmd": "bpl",
@@ -1790,7 +1796,7 @@ def cmd_bpl(debugger, command, result, dict):
             help_msg(help)
             return
 
-    target = get_target()
+    target = ctx.GetTarget()
     # nothing to present
     if target.num_breakpoints == 0:
         print("No breakpoints currently set.")
@@ -1861,7 +1867,7 @@ def cmd_bpl(debugger, command, result, dict):
     print("Total: {:^d} - Software: {:^d}/{:^d} - Hardware: {:^d}/{:^d}".format(total, total-hw-disabledsoft, total-hw, hw-disabledhw, hw))
 
 # skip current instruction - just advances PC to next instruction but doesn't execute it
-def cmd_skip(debugger, command, result, dict):
+def cmd_skip(debugger, command, ctx, result, dict):
     """Advance PC to instruction at next address. Use \'skip help\' for more information."""
     help = {
         "cmd": "skip",
@@ -1879,20 +1885,22 @@ def cmd_skip(debugger, command, result, dict):
         help_msg(help)
         return
 
-    start_addr = get_current_pc()
-    next_addr = start_addr + get_inst_size(start_addr)
+    start_addr = get_current_pc(ctx)
+    next_addr = start_addr + get_inst_size(ctx, start_addr)
+    target = ctx.GetTarget()
+    frame = ctx.GetFrame()
 
-    if is_x64():
-        get_frame().reg["rip"].value = format(next_addr, "#x")
-    elif is_i386():
-        get_frame().reg["eip"].value = format(next_addr, "#x")
-    elif is_arm():
-        get_frame().reg["pc"].value = format(next_addr, "#x")
+    if is_x64(target):
+        frame.reg["rip"].value = format(next_addr, "#x")
+    elif is_i386(target):
+        frame.reg["eip"].value = format(next_addr, "#x")
+    elif is_arm(target):
+        frame.reg["pc"].value = format(next_addr, "#x")
 
     # show the updated context
     lldb.debugger.HandleCommand("context")
 
-def cmd_int3(debugger, command, result, dict):
+def cmd_int3(debugger, command, ctx, result, dict):
     """Patch at address to a breakpoint instruction (INT3 for x86, BRK #0 for AArch64) . Use \'int3 help\' for more information."""
     help = {
         "cmd": "int3",
@@ -1906,12 +1914,12 @@ def cmd_int3(debugger, command, result, dict):
     }
     global int3patches
     error = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
 
     cmd = command.split()
     # if empty insert a int3 at current PC
     if len(cmd) == 0:
-        int3_addr = get_current_pc()
+        int3_addr = get_current_pc(ctx)
         if int3_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -1920,7 +1928,7 @@ def cmd_int3(debugger, command, result, dict):
            help_msg(help)
            return
 
-        int3_addr = evaluate(cmd[0])
+        int3_addr = evaluate(ctx, cmd[0])
         if int3_addr is None:
             err_msg("Invalid input address value.")
             help_msg(help)
@@ -1931,7 +1939,7 @@ def cmd_int3(debugger, command, result, dict):
         return
 
     bpt_size = 1
-    if is_arm():
+    if is_arm(target):
         bpt_size = 4
 
     bytes_string = target.GetProcess().ReadMemory(int3_addr, bpt_size, error)
@@ -1942,12 +1950,12 @@ def cmd_int3(debugger, command, result, dict):
     bytes_read = bytearray(bytes_string)
     if is_python2():
         patch_bytes = str("\xCC")
-        if is_arm():
+        if is_arm(target):
             # brk #0
             patch_bytes = str("\x00\x00\x20\xd4")
     else:
         patch_bytes = bytearray(b"\xCC")
-        if is_arm():
+        if is_arm(target):
             patch_bytes = bytearray(b"\x00\x00\x20\xd4")
 
     # insert the patch
@@ -1961,7 +1969,7 @@ def cmd_int3(debugger, command, result, dict):
     print("[+] Patched breakpoint at 0x{:x}".format(int3_addr))
     return
 
-def cmd_rint3(debugger, command, result, dict):
+def cmd_rint3(debugger, command, ctx, result, dict):
     """Restore byte at address from a previously patched breakpoint instruction. Use \'rint3 help\' for more information."""
     help = {
         "cmd": "rint3",
@@ -1973,11 +1981,11 @@ def cmd_rint3(debugger, command, result, dict):
     }
     global int3patches
     error = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     cmd = command.split()
     # if empty insert a int3 at current PC
     if len(cmd) == 0:
-        int3_addr = get_current_pc()
+        int3_addr = get_current_pc(ctx)
         if int3_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -1985,7 +1993,7 @@ def cmd_rint3(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        int3_addr = evaluate(cmd[0])
+        int3_addr = evaluate(ctx, cmd[0])
         if int3_addr is None:
             err_msg("Invalid input address value.")
             help_msg(help)
@@ -2006,10 +2014,10 @@ def cmd_rint3(debugger, command, result, dict):
     original_bytes = int3patches[str(int3_addr)]
 
     bpt_size = 1
-    if is_arm():
+    if is_arm(target):
         bpt_size = 4
 
-    bytes_string = target.GetProcess().ReadMemory(int3_addr, bpt_size, error)
+    bytes_string = ctx.GetProcess().ReadMemory(int3_addr, bpt_size, error)
     if not error.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(int3_addr))
         return
@@ -2027,7 +2035,7 @@ def cmd_rint3(debugger, command, result, dict):
     else:
         patch_bytes = original_bytes
     # restore original bytes
-    result = target.GetProcess().WriteMemory(int3_addr, patch_bytes, error)
+    result = ctx.GetProcess().WriteMemory(int3_addr, patch_bytes, error)
     if not error.Success():
         err_msg("Failed to write memory at 0x{:x}.".format(int3_addr))
         return
@@ -2035,7 +2043,7 @@ def cmd_rint3(debugger, command, result, dict):
     del int3patches[str(int3_addr)]
     return
 
-def cmd_listint3(debugger, command, result, dict):
+def cmd_listint3(debugger, command, ctx, result, dict):
     """List all patched addresses with breakpoint instructions. Use \'listint3 help\' for more information."""
     help = {
         "cmd": "listint3",
@@ -2062,7 +2070,7 @@ def cmd_listint3(debugger, command, result, dict):
 
     return
 
-def cmd_nop(debugger, command, result, dict):
+def cmd_nop(debugger, command, ctx, result, dict):
     """NOP byte(s) at address. Use \'nop help\' for more information."""
     help = {
         "cmd": "nop",
@@ -2079,27 +2087,27 @@ def cmd_nop(debugger, command, result, dict):
         ],
     }
     error = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
            help_msg(help)
            return
 
-        nop_addr = evaluate(cmd[0])
+        nop_addr = evaluate(ctx, cmd[0])
         patch_size = 1
         if nop_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
     elif len(cmd) == 2:
-        nop_addr = evaluate(cmd[0])
+        nop_addr = evaluate(ctx, cmd[0])
         if nop_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
 
-        patch_size = evaluate(cmd[1])
+        patch_size = evaluate(ctx, cmd[1])
         if patch_size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2115,18 +2123,18 @@ def cmd_nop(debugger, command, result, dict):
     if is_python2():
         patch_len = 1
         patch_bytes = str("\x90")
-        if is_arm():
+        if is_arm(target):
             patch_bytes = str("\x1f\x20\x03\xd5")
             patch_len = 4
     else:
         patch_len = 1
         patch_bytes = bytearray(b"\x90")
-        if is_arm():
+        if is_arm(target):
             patch_bytes = bytearray(b"\x1f\x20\x03\xd5")
             patch_len = 4
 
     for i in range(patch_size):
-        result = target.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
+        result = ctx.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
         if not error.Success():
             err_msg("Failed to write memory at 0x{:x}.".format(current_patch_addr))
             return
@@ -2134,7 +2142,7 @@ def cmd_nop(debugger, command, result, dict):
 
     return
 
-def cmd_null(debugger, command, result, dict):
+def cmd_null(debugger, command, ctx, result, dict):
     """Patch byte(s) at address to NULL (0x00). Use \'null help\' for more information."""
     help = {
         "cmd": "null",
@@ -2149,25 +2157,25 @@ def cmd_null(debugger, command, result, dict):
         "notes": ["Expressions are supported, do not use spaces between operators. Example: null $pc+0x10"],
     }
     error = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     cmd = command.split()
     if len(cmd) == 1:
         if cmd[0] == "help":
            help_msg(help)
            return
-        null_addr = evaluate(cmd[0])
+        null_addr = evaluate(ctx, cmd[0])
         patch_size = 1
         if null_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
     elif len(cmd) == 2:
-        null_addr = evaluate(cmd[0])
+        null_addr = evaluate(ctx, cmd[0])
         if null_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
-        patch_size = evaluate(cmd[1])
+        patch_size = evaluate(ctx, cmd[1])
         if patch_size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2182,7 +2190,7 @@ def cmd_null(debugger, command, result, dict):
     patch_bytes = str("\x00")
     # can we do better here? WriteMemory takes an input string... weird
     for i in range(patch_size):
-        result = target.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
+        result = ctx.GetProcess().WriteMemory(current_patch_addr, patch_bytes, error)
         if not error.Success():
             err_msg("Failed to write memory at 0x{:x}.".format(current_patch_addr))
             return
@@ -2190,7 +2198,7 @@ def cmd_null(debugger, command, result, dict):
     return
 
 # Implements the stepover command.
-def cmd_stepo(debugger, command, result, dict):
+def cmd_stepo(debugger, command, ctx, result, dict):
     """Step over calls and some other instructions so we don't need to step into them. Use \'stepo help\' for more information."""
     help = {
         "cmd": "stepo",
@@ -2208,30 +2216,30 @@ Affected instructions:
 
     debugger.SetAsync(True)
 
-    target = get_target()
+    target = ctx.GetTarget()
 
     # compute the next address where to breakpoint
-    pc_addr = get_current_pc()
+    pc_addr = get_current_pc(ctx)
     if pc_addr == 0:
         err_msg("Invalid current address.")
         return
 
-    next_addr = pc_addr + get_inst_size(pc_addr)
+    next_addr = pc_addr + get_inst_size(ctx, pc_addr)
     # much easier to use the mnemonic output instead of disassembling via cmd line and parse
-    mnemonic = get_mnemonic(pc_addr)
+    mnemonic = get_mnemonic(ctx, pc_addr)
 
-    if is_arm():
+    if is_arm(target):
         # the a versions are with pointer authentication
         branch_mnemo = ["bl", "blr", "blraa", "blraaz", "blrab", "blrabz"]
         if mnemonic in branch_mnemo:
             breakpoint = target.BreakpointCreateByAddress(next_addr)
-            breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
+            breakpoint.SetThreadID(ctx.GetFrame().GetThread().GetThreadID())
             breakpoint.SetOneShot(True)
-            breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
+            breakpoint.SetThreadID(ctx.GetFrame().GetThread().GetThreadID())
             target.GetProcess().Continue()
             return
         else:
-            get_process().selected_thread.StepInstruction(False)
+            ctx.GetProcess().selected_thread.StepInstruction(False)
             return
     # XXX: make the other instructions besides call user configurable?
     # calls can be call, callq, so use wider matching for those
@@ -2239,15 +2247,15 @@ Affected instructions:
     if mnemonic in step_list:
         breakpoint = target.BreakpointCreateByAddress(next_addr)
         breakpoint.SetOneShot(True)
-        breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
+        breakpoint.SetThreadID(ctx.GetFrame().GetThread().GetThreadID())
         target.GetProcess().Continue()
     else:
-        get_process().selected_thread.StepInstruction(False)
+        ctx.GetProcess().selected_thread.StepInstruction(False)
 
 """
     Implements stepover instruction with hardware breakpoints.
 """
-def cmd_stepoh(debugger, command, result, dict):
+def cmd_stepoh(debugger, command, ctx, result, dict):
     """Step over calls and some other instructions so we don't need to step into them, using hardware breakpoints. Use \'stepohhelp\' for more information."""
     help = {
         "cmd": "stepoh",
@@ -2265,29 +2273,29 @@ Affected instructions:
 
     debugger.SetAsync(True)
 
-    target = get_target()
+    target = ctx.GetTarget()
     res = lldb.SBCommandReturnObject()
 
     # compute the next address where to breakpoint
-    pc_addr = get_current_pc()
+    pc_addr = get_current_pc(ctx)
     if pc_addr == 0:
         err_msg("Invalid current address.")
         return
 
-    next_addr = pc_addr + get_inst_size(pc_addr)
+    next_addr = pc_addr + get_inst_size(ctx, pc_addr)
     # much easier to use the mnemonic output instead of disassembling via cmd line and parse
-    mnemonic = get_mnemonic(pc_addr)
+    mnemonic = get_mnemonic(ctx, pc_addr)
 
-    if is_arm():
+    if is_arm(target):
         # the a versions are with pointer authentication
         branch_mnemo = ["bl", "blr", "blraa", "blraaz", "blrab", "blrabz"]
         if mnemonic in branch_mnemo:
             # setup temporary hardware breakpoint for current thread only
             lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H --one-shot true -t current -a {}".format(hex(next_addr)), res)
-            target.GetProcess().Continue()
+            ctx.GetProcess().Continue()
             return
         else:
-            get_process().selected_thread.StepInstruction(False)
+            ctx.GetProcess().selected_thread.StepInstruction(False)
             return
     # XXX: make the other instructions besides call user configurable?
     # calls can be call, callq, so use wider matching for those
@@ -2295,13 +2303,13 @@ Affected instructions:
     if mnemonic in step_list:
         # setup temporary hardware breakpoint for current thread only
         lldb.debugger.GetCommandInterpreter().HandleCommand("breakpoint set -H --one-shot true -t current -a {}".format(hex(next_addr)), res)
-        target.GetProcess().Continue()
+        ctx.GetProcess().Continue()
     else:
-        get_process().selected_thread.StepInstruction(False)
+        ctx.GetProcess().selected_thread.StepInstruction(False)
         return
 
 # Temporarily breakpoint next instruction - this is useful to skip loops (don't want to use stepo for this purpose)
-def cmd_bpn(debugger, command, result, dict):
+def cmd_bpn(debugger, command, ctx, result, dict):
     """Temporarily breakpoint instruction at next address. Use \'bpn help\' for more information."""
     help = {
         "cmd": "bpn",
@@ -2319,19 +2327,19 @@ def cmd_bpn(debugger, command, result, dict):
         help_msg(help)
         return
 
-    target = get_target()
-    start_addr = get_current_pc()
-    next_addr = start_addr + get_inst_size(start_addr)
+    target = ctx.GetTarget()
+    start_addr = get_current_pc(ctx)
+    next_addr = start_addr + get_inst_size(ctx, start_addr)
 
     breakpoint = target.BreakpointCreateByAddress(next_addr)
     breakpoint.SetOneShot(True)
-    breakpoint.SetThreadID(get_frame().GetThread().GetThreadID())
+    breakpoint.SetThreadID(ctx.GetThread().GetThreadID())
 
     print("[+] Set temporary breakpoint at 0x{:x}".format(next_addr))
 
 # command that sets rax/eax/x0 to 1 or 0 and returns right away from current function
 # technically just a shortcut to "thread return"
-def cmd_crack(debugger, command, result, dict):
+def cmd_crack(debugger, command, ctx, result, dict):
     """Return from current function and set return value. Use \'crack help\' for more information."""
     help = {
         "cmd": "crack",
@@ -2352,13 +2360,14 @@ Most useful to use at the beginning of the function to return from.""",
         return
 
     # breakpoint disable only accepts breakpoint numbers not addresses
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid return value.")
         help_msg(help)
         return
 
-    frame = get_frame()
+    frame = ctx.GetFrame()
+    target = ctx.GetTarget()
     # if we copy the SBValue from any register and use that copy
     # for return value we will get that register and rax/eax set
     # on return
@@ -2366,21 +2375,21 @@ Most useful to use at the beginning of the function to return from.""",
     # if we do a lldb.SBValue() we can't set to that type
     # so we need to make a copy
     # can we use FindRegister() from frame?
-    if is_x64():
+    if is_x64(target):
         return_value = frame.reg["rax"]
-    elif is_arm():
+    elif is_arm(target):
         return_value = frame.reg["x0"]
-    elif is_i386():
+    elif is_i386(target):
         return_value = frame.reg["eax"]
     else:
         err_msg("Unsupported architecture.")
         return
     return_value.value = str(value)
     # XXX: should check the frame count and validate if there is something to return to
-    get_thread().ReturnFromFrame(frame, return_value)
+    frame.ReturnFromFrame(frame, return_value)
 
 # set a breakpoint with return command associated when hit
-def cmd_crackcmd(debugger, command, result, dict):
+def cmd_crackcmd(debugger, command, ctx, result, dict):
     """Breakpoint an address, when breakpoint is hit return from function and set return value. Use \'crackcmd help\' for more information."""
     help = {
         "cmd": "crackcmd",
@@ -2408,13 +2417,13 @@ def cmd_crackcmd(debugger, command, result, dict):
         return
 
     # XXX: is there a way to verify if address is valid? or just let lldb error when setting the breakpoint
-    address = evaluate(cmd[0])
+    address = evaluate(ctx, cmd[0])
     if address is None:
         err_msg("Invalid address value.")
         help_msg(help)
         return
 
-    return_value = evaluate(cmd[1])
+    return_value = evaluate(ctx, cmd[1])
     if return_value is None:
         err_msg("Invalid return value.")
         help_msg(help)
@@ -2431,8 +2440,7 @@ def cmd_crackcmd(debugger, command, result, dict):
     new_crack_entry["return_value"] = return_value
     crack_cmds.append(new_crack_entry)
 
-    target = get_target()
-
+    target = ctx.GetTarget()
     # we want a global breakpoint
     breakpoint = target.BreakpointCreateByAddress(address)
     # when the breakpoint is hit we get this callback executed
@@ -2454,22 +2462,24 @@ def crackcmd_callback(frame, bp_loc, internal_dict):
         err_msg("The current breakpoint was not found in the list.")
         return
 
+    proc = frame.GetThread().GetProcess()
+    target = proc.GetTarget()
     # we can just set the register in the frame and return empty SBValue
-    if is_x64():
+    if is_x64(target):
         frame.reg["rax"].value = str(crack_entry["return_value"]).rstrip("L")
-    elif is_arm():
+    elif is_arm(target):
         frame.reg["x0"].value = str(crack_entry["return_value"]).rstrip("L")
-    elif is_i386():
+    elif is_i386(target):
         frame.reg["eax"].value = str(crack_entry["return_value"]).rstrip("L")
     else:
         err_msg("Unsupported architecture.")
         return
 
-    get_thread().ReturnFromFrame(frame, lldb.SBValue())
-    get_process().Continue()
+    frame.GetThread().ReturnFromFrame(frame, lldb.SBValue())
+    proc.Continue()
 
 # set a breakpoint with a command that doesn't return, just sets the specified register to a value
-def cmd_crackcmd_noret(debugger, command, result, dict):
+def cmd_crackcmd_noret(debugger, command, ctx, result, dict):
     """Set a breakpoint and a register to a value when hit. Use \'crackcmd_noret help\' for more information."""
     help = {
         "cmd": "crackcmd_noret",
@@ -2496,29 +2506,30 @@ def cmd_crackcmd_noret(debugger, command, result, dict):
         help_msg(help)
         return
 
-    address = evaluate(cmd[0])
+    address = evaluate(ctx, cmd[0])
     register = cmd[1]
-    value = evaluate(cmd[2])
+    value = evaluate(ctx, cmd[2])
 
     if address is None:
         err_msg("Invalid address.")
         help_msg(help)
         return
 
+    target = ctx.GetTarget()
     # check if register is set and valid
-    if is_x64():
+    if is_x64(target):
         valid = ["rip","rax","rbx","rbp","rsp","rdi","rsi","rdx","rcx","r8","r9","r10","r11","r12","r13","r14","r15"]
         if register not in valid:
             err_msg("Invalid register for x64 architecture.")
             help_msg(help)
             return
-    elif is_arm():
+    elif is_arm(target):
         valid = ["x0","x1","x2","x3","x4","x5","x6","x7","x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","x18","x19","x20","x21","x22","x23","x24","x25","x26","x27","x28","fp","lr","sp","pc","cpsr"]
         if register not in valid:
             err_msg("Invalid register for arm64 architecture.")
             help_msg(help)
             return
-    elif is_i386():
+    elif is_i386(target):
         valid = ["eip","eax","ebx","ebp","esp","edi","esi","edx","ecx"]
         if register not in valid:
             err_msg("Invalid register for i386 architecture.")
@@ -2543,8 +2554,6 @@ def cmd_crackcmd_noret(debugger, command, result, dict):
 
     crack_cmds_noret.append(new_crack_entry)
 
-    target = get_target()
-
     # we want a global breakpoint
     breakpoint = target.BreakpointCreateByAddress(address)
     # when the breakpoint is hit we get this callback executed
@@ -2567,7 +2576,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
 
     # must be a string!
     frame.reg[crack_entry["register"]].value = str(crack_entry["value"]).rstrip("L")
-    get_process().Continue()
+    frame.GetThread().GetProcess().Continue()
 
 # -----------------------
 # Memory related commands
@@ -2577,7 +2586,7 @@ def crackcmd_noret_callback(frame, bp_loc, internal_dict):
     Output nice memory hexdumps...
 """
 # display byte values and ASCII characters
-def cmd_db(debugger, command, result, dict):
+def cmd_db(debugger, command, ctx, result, dict):
     """Display hex dump in byte values and ASCII characters. Use \'db help\' for more information."""
     help = {
         "cmd": "db",
@@ -2593,7 +2602,7 @@ def cmd_db(debugger, command, result, dict):
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
-        dump_addr = get_current_pc()
+        dump_addr = get_current_pc(ctx)
         if dump_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -2601,7 +2610,7 @@ def cmd_db(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
@@ -2610,12 +2619,12 @@ def cmd_db(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
-        size = evaluate(cmd[1])
+        size = evaluate(ctx, cmd[1])
         if size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2627,7 +2636,7 @@ def cmd_db(debugger, command, result, dict):
 
     err = lldb.SBError()
 
-    membuf = get_process().ReadMemory(dump_addr, size, err)
+    membuf = ctx.GetProcess().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
@@ -2674,7 +2683,7 @@ def cmd_db(debugger, command, result, dict):
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display word values and ASCII characters
-def cmd_dw(debugger, command, result, dict):
+def cmd_dw(debugger, command, ctx, result, dict):
     """ Display hex dump in word values and ASCII characters. Use \'dw help\' for more information."""
     help = {
         "cmd": "dw",
@@ -2690,7 +2699,7 @@ def cmd_dw(debugger, command, result, dict):
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
-        dump_addr = get_current_pc()
+        dump_addr = get_current_pc(ctx)
         if dump_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -2698,7 +2707,7 @@ def cmd_dw(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
@@ -2707,12 +2716,12 @@ def cmd_dw(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
-        size = evaluate(cmd[1])
+        size = evaluate(ctx, cmd[1])
         if size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2727,7 +2736,7 @@ def cmd_dw(debugger, command, result, dict):
         return
 
     err = lldb.SBError()
-    membuf = get_process().ReadMemory(dump_addr, size, err)
+    membuf = ctx.GetProcess().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
@@ -2752,10 +2761,11 @@ def cmd_dw(debugger, command, result, dict):
             output("\n")
         index += 0x10
         dump_addr += 0x10
+    output("\n")
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display dword values and ASCII characters
-def cmd_dd(debugger, command, result, dict):
+def cmd_dd(debugger, command, ctx, result, dict):
     """ Display hex dump in double word values and ASCII characters. Use \'dd help\' for more information."""
     help = {
         "cmd": "dd",
@@ -2771,7 +2781,7 @@ def cmd_dd(debugger, command, result, dict):
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
-        dump_addr = get_current_pc()
+        dump_addr = get_current_pc(ctx)
         if dump_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -2779,7 +2789,7 @@ def cmd_dd(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
@@ -2788,12 +2798,12 @@ def cmd_dd(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
-        size = evaluate(cmd[1])
+        size = evaluate(ctx, cmd[1])
         if size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2808,7 +2818,7 @@ def cmd_dd(debugger, command, result, dict):
         return
 
     err = lldb.SBError()
-    membuf = get_process().ReadMemory(dump_addr, size, err)
+    membuf = ctx.GetProcess().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
@@ -2831,10 +2841,11 @@ def cmd_dd(debugger, command, result, dict):
             output("\n")
         index += 0x10
         dump_addr += 0x10
+    output("\n")
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # display quad values
-def cmd_dq(debugger, command, result, dict):
+def cmd_dq(debugger, command, ctx, result, dict):
     """ Display hex dump in quad values. Use \'dq help\' for more information."""
     help = {
         "cmd": "dq",
@@ -2850,7 +2861,7 @@ def cmd_dq(debugger, command, result, dict):
     size = 0x100
     cmd = command.split()
     if len(cmd) == 0:
-        dump_addr = get_current_pc()
+        dump_addr = get_current_pc(ctx)
         if dump_addr == 0:
             err_msg("Invalid current address.")
             return
@@ -2858,7 +2869,7 @@ def cmd_dq(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
@@ -2867,12 +2878,12 @@ def cmd_dq(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        dump_addr = evaluate(cmd[0])
+        dump_addr = evaluate(ctx, cmd[0])
         if dump_addr is None:
             err_msg("Invalid address value.")
             help_msg(help)
             return
-        size = evaluate(cmd[1])
+        size = evaluate(ctx, cmd[1])
         if size is None:
             err_msg("Invalid size value.")
             help_msg(help)
@@ -2887,7 +2898,7 @@ def cmd_dq(debugger, command, result, dict):
         return
 
     err = lldb.SBError()
-    membuf = get_process().ReadMemory(dump_addr, size, err)
+    membuf = ctx.GetProcess().ReadMemory(dump_addr, size, err)
     if not err.Success():
         err_msg("Failed to read memory from address 0x{:x}.".format(dump_addr))
         result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
@@ -2911,6 +2922,7 @@ def cmd_dq(debugger, command, result, dict):
             output("\n")
         index += 0x20
         dump_addr += 0x20
+    output("\n")
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # thx poupas :-)
@@ -2949,7 +2961,7 @@ def hexdump(addr, chars, sep, width, lines=5):
         line_count = line_count + 1
     return "\n".join(out)
 
-def quotechars( chars ):
+def quotechars(chars):
     data = ""
     for x in bytearray(chars):
         if x >= 0x20 and x <= 0x7E:
@@ -2961,7 +2973,7 @@ def quotechars( chars ):
 # XXX: help
 # find memory command - lldb has 'memory find' but requires a start and end address where to search
 # this version will seek in all available process memory regions
-def cmd_findmem(debugger, command, result, dict):
+def cmd_findmem(debugger, command, ctx, result, dict):
     """Search memory."""
     help = """
 [options]
@@ -2997,13 +3009,13 @@ def cmd_findmem(debugger, command, result, dict):
             search_string = bytes.fromhex(parser.binary)
 
     elif parser.dword is not None:
-        dword = evaluate(parser.dword)
+        dword = evaluate(ctx, parser.dword)
         if dword is None:
             err_msg("Evaluating : " + parser.dword)
             return
         search_string = struct.pack("I", dword & 0xFFFFFFFF)
     elif parser.qword is not None:
-        qword = evaluate(parser.qword)
+        qword = evaluate(ctx, parser.qword)
         if qword is None:
             err_msg("Evaluating : " + parser.qword)
             return
@@ -3022,15 +3034,15 @@ def cmd_findmem(debugger, command, result, dict):
 
     count = -1
     if parser.count is not None:
-        count = evaluate(parser.count)
+        count = evaluate(ctx, parser.count)
         if count is None:
             err_msg("Evaluating count : " + parser.count)
             return
 
-    process = get_process()
-    target = get_target()
+    proc = ctx.GetProcess()
+    target = ctx.GetTarget()
     # retrieve SBMemoryRegionInfoList list
-    regions = process.GetMemoryRegions()
+    regions = proc.GetMemoryRegions()
     # iterate list of SBMemoryRegionInfo
     scan_list = []
     for i in range(0, regions.GetSize()):
@@ -3054,7 +3066,7 @@ def cmd_findmem(debugger, command, result, dict):
         err = lldb.SBError()
         # XXX: this is going to use a lot of memory for large zones
         #      we should split reading?
-        membuf = process.ReadMemory(mem_start, mem_size, err)
+        membuf = proc.ReadMemory(mem_start, mem_size, err)
         if not err.Success():
             # output(str(err));
             continue
@@ -3107,7 +3119,7 @@ def cmd_findmem(debugger, command, result, dict):
 
 # display information about process memory regions similar to vmmap
 # contains less information in particular the type of memory region
-def cmd_showregions(debugger, command, result, dict):
+def cmd_showregions(debugger, command, ctx, result, dict):
     """Display memory regions information."""
     help = {
         "cmd": "showregions",
@@ -3119,9 +3131,9 @@ def cmd_showregions(debugger, command, result, dict):
     if len(cmd) > 0 and cmd[0] == "help":
         help_msg(help)
         return
-    process = get_process()
-    target = get_target()
-    regions = process.GetMemoryRegions()
+    proc = ctx.GetProcess()
+    target = ctx.GetTarget()
+    regions = proc.GetMemoryRegions()
     if POINTER_SIZE == 4:
         ptrformat = "0x{:08x} 0x{:08x} 0x{:08x} {:s}{:s}{:s} {:^16s} {:<s}"
         hdrformat = "{:^10s} {:^10s} {:^10s} {:^4s} {:^16s} {:^12s}\n-------------------------------------------------------------------------"
@@ -3150,7 +3162,7 @@ def cmd_showregions(debugger, command, result, dict):
         # try to find the type of region by reading some bytes
         # and matching magic values
         # XXX: we should read more bytes here?
-        membuf = process.ReadMemory(start, 4, err)
+        membuf = proc.ReadMemory(start, 4, err)
         if not err.Success():
             continue
         data = struct.unpack("I", membuf)
@@ -3181,7 +3193,7 @@ def cmd_showregions(debugger, command, result, dict):
             print(ptrformat.format(start, end, size, r, w, x, hdr_name, module_name))
     return
 
-def cmd_datawin(debugger, command, result, dict):
+def cmd_datawin(debugger, command, ctx, result, dict):
     """Configure address to display in data window. Use \'datawin help\' for more information."""
     help = {
         "cmd": "datawin",
@@ -3205,7 +3217,7 @@ The data window display will be fixed to the address you set. Useful to observe 
         help_msg(help)
         return
 
-    dump_addr = evaluate(cmd[0])
+    dump_addr = evaluate(ctx, cmd[0])
     if dump_addr is None:
         err_msg("Invalid address value.")
         help_msg(help)
@@ -3222,47 +3234,12 @@ def is_python2():
         return True
     return False
 
-def get_arch():
-    target = get_target()
+def get_arch(target):
     return target.triple.split("-")[0]
 
-# return frame for stopped thread... there should be one at least...
-def get_frame():
-    frame = None
-    # SBProcess supports thread iteration -> SBThread
-    for thread in get_process():
-        if thread.GetStopReason() != lldb.eStopReasonNone and thread.GetStopReason() != lldb.eStopReasonInvalid:
-            frame = thread.GetFrameAtIndex(0)
-            break
-    # this will generate a false positive when we start the target the first time because there's no context yet.
-    if frame is None:
-        raise Exception("[!] Warning: get_frame() failed. Is the target binary started?")
-    return frame
-
-def get_thread():
-    ret = None
-    # SBProcess supports thread iteration -> SBThread
-    for thread in get_process():
-        if thread.GetStopReason() != lldb.eStopReasonNone and thread.GetStopReason() != lldb.eStopReasonInvalid:
-            ret = thread
-            # XXX: bug? should break?
-
-    if ret is None:
-        print("[!] Warning: get_thread() failed. Is the target binary started?")
-    return ret
-
-def get_target():
-    target = lldb.debugger.GetSelectedTarget()
-    if not target:
-        raise Exception("[-] ERROR: No target available. Please add a target to lldb.")
-    return target
-
-def get_process():
-    return get_target().GetProcess()
-
 # evaluate an expression and return the value it represents
-def evaluate(command):
-    frame = get_frame()
+def evaluate(ctx, command):
+    frame = ctx.GetFrame()
     if frame is not None:
         value = frame.EvaluateExpression(command)
         if not value.IsValid():
@@ -3275,7 +3252,7 @@ def evaluate(command):
             return None
     # use the target version - if no target exists we can't do anything about it
     else:
-        target = get_target()
+        target = ctx.GetTarget()
         if target is None:
             return None
         value = target.EvaluateExpression(command)
@@ -3288,33 +3265,34 @@ def evaluate(command):
             err_msg("Exception on evaluate: " + str(e))
             return None
 
-def is_i386():
-    arch = get_arch()
+def is_i386(target):
+    arch = get_arch(target)
     return arch == "i386"
 
-def is_x64():
-    arch = get_arch()
+def is_x64(target):
+    arch = get_arch(target)
     return arch.startswith("x86_64")
 
-def is_arm():
-    arch = get_arch()
+def is_arm(target):
+    arch = get_arch(target)
     # Linux returns aarch64 instead of arm64* for macOS/iOS
     return arch.startswith("arm64") or arch == "aarch64"
 
-def get_pointer_size():
-    poisz = evaluate("sizeof(long)")
+def get_pointer_size(ctx):
+    poisz = evaluate(ctx, "sizeof(long)")
     return poisz
 
 # from https://github.com/facebook/chisel/blob/main/fbchisellldbobjcruntimehelpers.py
 # returns a string with an expression to evaluate to retrieve the target object
-def get_instance_object():
+def get_instance_object(ctx):
     instanceObject = None
-    if is_i386():
+    target = ctx.GetTarget()
+    if is_i386(target):
         # at the call to objc_msgSend esp contains object, esp+4 the selector
         instanceObject = "*(id*)($esp)"
-    elif is_x64():
+    elif is_x64(target):
         instanceObject = "(id)$rdi"
-    elif is_arm():
+    elif is_arm(target):
         instanceObject = "(id)$x0"
     return instanceObject
 
@@ -3323,8 +3301,8 @@ def get_instance_object():
 # -------------------------
 
 # return the int value of a general purpose register
-def get_gp_register(reg_name):
-    regs = get_registers("general purpose")
+def get_gp_register(ctx, reg_name):
+    regs = get_registers(ctx, "general purpose")
     if regs is None:
         return 0
     for reg in regs:
@@ -3332,8 +3310,8 @@ def get_gp_register(reg_name):
             return reg.unsigned
     return 0
 
-def get_gp_registers():
-    regs = get_registers("general purpose")
+def get_gp_registers(ctx):
+    regs = get_registers(ctx, "general purpose")
     if regs is None:
         return 0
 
@@ -3343,8 +3321,8 @@ def get_gp_registers():
         registers[reg_name] = reg.unsigned
     return registers
 
-def get_register(reg_name):
-    regs = get_registers("general purpose")
+def get_register(ctx, reg_name):
+    regs = get_registers(ctx, "general purpose")
     if regs is None:
         return "0"
     for reg in regs:
@@ -3352,12 +3330,12 @@ def get_register(reg_name):
             return reg.GetValue()
     return "0"
 
-def get_registers(kind):
+def get_registers(ctx, kind):
     """Returns the registers given the frame and the kind of registers desired.
 
     Returns None if there's no such kind.
     """
-    frame = get_frame()
+    frame = ctx.GetFrame()
     if frame is None:
         return None
     registerSet = frame.GetRegisters() # Return type of SBValueList.
@@ -3367,21 +3345,22 @@ def get_registers(kind):
     return None
 
 # retrieve current instruction pointer via platform independent $pc register
-def get_current_pc():
-    frame = get_frame()
+def get_current_pc(ctx):
+    frame = ctx.GetFrame()
     if frame is None:
         return 0
     pc = frame.FindRegister("pc")
     return int(pc.GetValue(), 16)
 
 # retrieve current stack pointer via registers information
-def get_current_sp():
-    if is_i386():
-        sp_addr = get_gp_register("esp")
-    elif is_x64():
-        sp_addr = get_gp_register("rsp")
-    elif is_arm():
-        sp_addr = get_gp_register("sp")
+def get_current_sp(ctx):
+    target = ctx.GetTarget()
+    if is_i386(target):
+        sp_addr = get_gp_register(ctx, "esp")
+    elif is_x64(target):
+        sp_addr = get_gp_register(ctx, "rsp")
+    elif is_arm(target):
+        sp_addr = get_gp_register(ctx, "sp")
     else:
         err_msg("Wrong architecture.")
         return 0
@@ -3389,7 +3368,7 @@ def get_current_sp():
 
 # function that updates given register
 # used for register aliases to replace individual commands per register
-def cmd_update_register(debugger, command, result, dict):
+def cmd_update_register(debugger, command, ctx, result, dict):
     help = {
         "cmd": "update_register",
         "short": "update register value",
@@ -3415,30 +3394,31 @@ def cmd_update_register(debugger, command, result, dict):
         return
 
     register = cmd[0]
-    value = evaluate(cmd[1])
+    value = evaluate(ctx, cmd[1])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
         return
     # test if register exists for current arch being debugged
-    valid_reg = get_frame().reg[register]
+    valid_reg = ctx.GetFrame().reg[register]
     if valid_reg is None:
-        arch = get_arch()
+        arch = get_arch(ctx.GetTarget())
         err_msg("Invalid register. Trying to set a register for the wrong arch? Current arch: {:s}".format(arch))
         return
     # we need to format because hex() will return string with an L and that will fail to update register
-    get_frame().reg[register].value = format(value, "#x")
+    ctx.GetFrame().reg[register].value = format(value, "#x")
 
 # -----------------------------
 # modify eflags/rflags commands
 # -----------------------------
 
-def modify_eflags(flag):
+def modify_eflags(ctx, flag):
     # read the current value so we can modify it
-    if is_x64():
-        eflags = get_gp_register("rflags")
-    elif is_i386():
-        eflags = get_gp_register("eflags")
+    target = ctx.GetTarget()
+    if is_x64(target):
+        eflags = get_gp_register(ctx, "rflags")
+    elif is_i386(target):
+        eflags = get_gp_register(ctx, "eflags")
     else:
         err_msg("Unsupported architecture for this command.")
         return
@@ -3454,13 +3434,14 @@ def modify_eflags(flag):
         eflags = eflags | (1 << masks[flag])
 
     # finally update the value
-    if is_x64():
-        get_frame().reg["rflags"].value = format(eflags, "#x")
-    elif is_i386():
-        get_frame().reg["eflags"].value = format(eflags, "#x")
+    if is_x64(target):
+        ctx.GetFrame().reg["rflags"].value = format(eflags, "#x")
+    elif is_i386(target):
+        ctx.GetFrame().reg["eflags"].value = format(eflags, "#x")
 
-def modify_cpsr(flag):
-    if is_x64() or is_i386():
+def modify_cpsr(ctx, flag):
+    target = ctx.GetTarget()
+    if is_x64(target) or is_i386(target):
         err_msg("Unsupported architecture for this command.")
         return
 
@@ -3469,16 +3450,16 @@ def modify_cpsr(flag):
         err_msg("Requested flag not available.")
         return
 
-    cpsr = get_gp_register("cpsr")
+    cpsr = get_gp_register(ctx, "cpsr")
     # we invert whatever value is set
     if bool(cpsr & (1 << masks[flag])):
         cpsr = cpsr & ~(1 << masks[flag])
     else:
         cpsr = cpsr | (1 << masks[flag])
-    get_frame().reg["cpsr"].value = format(cpsr, "#x")
+    ctx.GetFrame().reg["cpsr"].value = format(cpsr, "#x")
 
 # AArch64 NZCV register negative bit
-def cmd_cfn(debugger, command, result, dict):
+def cmd_cfn(debugger, command, ctx, result, dict):
     """Change negative flag. Use \'cfn help\' for more information."""
     help = {
         "cmd": "cfn",
@@ -3494,10 +3475,10 @@ def cmd_cfn(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_cpsr("N")
+    modify_cpsr(ctx, "N")
 
 # AArch NZCV register overflow bit
-def cmd_cfv(debugger, command, result, dict):
+def cmd_cfv(debugger, command, ctx, result, dict):
     """Change overflow flag. Use \'cfv help\' for more information."""
     help = {
         "cmd": "cfv",
@@ -3513,9 +3494,9 @@ def cmd_cfv(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_cpsr("V")
+    modify_cpsr(ctx, "V")
 
-def cmd_cfa(debugger, command, result, dict):
+def cmd_cfa(debugger, command, ctx, result, dict):
     """Change adjust flag. Use \'cfa help\' for more information."""
     help = {
         "cmd": "cfa",
@@ -3531,9 +3512,9 @@ def cmd_cfa(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("AF")
+    modify_eflags(ctx, "AF")
 
-def cmd_cfc(debugger, command, result, dict):
+def cmd_cfc(debugger, command, ctx, result, dict):
     """Change carry flag. Use \'cfc help\' for more information."""
     help = {
         "cmd": "cfc",
@@ -3549,12 +3530,12 @@ def cmd_cfc(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    if is_arm():
-        modify_cpsr("C")
+    if is_arm(ctx.GetTarget()):
+        modify_cpsr(ctx, "C")
     else:
-        modify_eflags("CF")
+        modify_eflags(ctx, "CF")
 
-def cmd_cfd(debugger, command, result, dict):
+def cmd_cfd(debugger, command, ctx, result, dict):
     """Change direction flag. Use \'cfd help\' for more information."""
     help = {
         "cmd": "cfd",
@@ -3570,9 +3551,9 @@ def cmd_cfd(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("DF")
+    modify_eflags(ctx, "DF")
 
-def cmd_cfi(debugger, command, result, dict):
+def cmd_cfi(debugger, command, ctx, result, dict):
     """Change interrupt flag. Use \'cfi help\' for more information."""
     help = {
         "cmd": "cfi",
@@ -3588,9 +3569,9 @@ def cmd_cfi(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("IF")
+    modify_eflags(ctx, "IF")
 
-def cmd_cfo(debugger, command, result, dict):
+def cmd_cfo(debugger, command, ctx, result, dict):
     """Change overflow flag. Use \'cfo help\' for more information."""
     help = {
         "cmd": "cfo",
@@ -3606,9 +3587,9 @@ def cmd_cfo(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("OF")
+    modify_eflags(ctx, "OF")
 
-def cmd_cfp(debugger, command, result, dict):
+def cmd_cfp(debugger, command, ctx, result, dict):
     """Change parity flag. Use \'cfp help\' for more information."""
     help = {
         "cmd": "cfp",
@@ -3624,9 +3605,9 @@ def cmd_cfp(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("PF")
+    modify_eflags(ctx, "PF")
 
-def cmd_cfs(debugger, command, result, dict):
+def cmd_cfs(debugger, command, ctx, result, dict):
     """Change sign flag. Use \'cfs help\' for more information."""
     help = {
         "cmd": "cfs",
@@ -3642,9 +3623,9 @@ def cmd_cfs(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("SF")
+    modify_eflags(ctx, "SF")
 
-def cmd_cft(debugger, command, result, dict):
+def cmd_cft(debugger, command, ctx, result, dict):
     """Change trap flag. Use \'cft help\' for more information."""
     help = {
         "cmd": "cft",
@@ -3660,9 +3641,9 @@ def cmd_cft(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    modify_eflags("TF")
+    modify_eflags(ctx, "TF")
 
-def cmd_cfz(debugger, command, result, dict):
+def cmd_cfz(debugger, command, ctx, result, dict):
     """Change zero flag. Use \'cfz help\' for more information."""
     help = {
         "cmd": "cfz",
@@ -3678,10 +3659,10 @@ def cmd_cfz(debugger, command, result, dict):
         err_msg("The command doesn't take any arguments.")
         help_msg(help)
         return
-    if is_arm():
-        modify_cpsr("Z")
+    if is_arm(ctx.GetTarget()):
+        modify_cpsr(ctx, "Z")
     else:
-        modify_eflags("ZF")
+        modify_eflags(ctx, "ZF")
 
 def dump_eflags(eflags):
     eflagsTuples = [("OF", 11), ("DF", 10), ("IF", 9), ("TF", 8), ("SF", 7), ("ZF", 6), ("AF", 4), ("PF", 2), ("CF", 0)]
@@ -3700,7 +3681,7 @@ def dump_eflags(eflags):
 
 # returns the result of a conditional AArch64 instruction and the flags condition text
 # adapted from https://github.com/ant4g0nist/lisa.py/blob/dev/lisa.py
-def dump_conditionalaarch64(cpsr):
+def dump_conditionalaarch64(ctx, cpsr):
     # In AArch64 state, the NZCV register holds copies of the N, Z, C, and V condition flags.
     # The processor uses them to determine whether or not to execute conditional instructions.
     # The NZCV register contains the flags in bits[31:28].
@@ -3738,10 +3719,10 @@ def dump_conditionalaarch64(cpsr):
 
     branch_mnemos = {"cbnz", "cbz", "tbnz", "tbz"}
 
-    pc_addr = get_gp_register("pc")
-    mnemo = get_mnemonic(pc_addr)
-    operands = get_operands(pc_addr)
-    insn = get_instruction(pc_addr)
+    pc_addr = get_gp_register(ctx, "pc")
+    mnemo = get_mnemonic(ctx, pc_addr)
+    operands = get_operands(ctx, pc_addr)
+    insn = get_instruction(ctx, pc_addr)
     # failed to retrieve instruction
     if insn.size == 0:
         return False, ""
@@ -3768,7 +3749,7 @@ def dump_conditionalaarch64(cpsr):
         # retrieve the first operand register name
         reg = x[0]
         # and its value
-        op = get_gp_register(reg)
+        op = get_gp_register(ctx, reg)
         # now we can deal with the instructions and their conditional results
         if mnemo == "cbnz":
             if op != 0:
@@ -3841,22 +3822,22 @@ def dump_conditionalaarch64(cpsr):
     return taken, reason
 
 # function to dump the conditional jumps results
-def dump_jumpx86(eflags):
+def dump_jumpx86(ctx, eflags):
     # masks and flags from https://github.com/ant4g0nist/lisa.py
     masks = {"CF":0,"PF":2,"AF":4,"ZF":6,"SF":7,"TF":8,"IF":9,"DF":10,"OF":11}
     flags = {key: bool(eflags & (1 << value)) for key, value in masks.items()}
 
     error = lldb.SBError()
-    target = get_target()
-    if is_i386():
-        pc_addr = get_gp_register("eip")
-    elif is_x64():
-        pc_addr = get_gp_register("rip")
+    target = ctx.GetTarget()
+    if is_i386(target):
+        pc_addr = get_gp_register(ctx, "eip")
+    elif is_x64(target):
+        pc_addr = get_gp_register(ctx, "rip")
     else:
         err_msg("Wrong architecture.")
         return
 
-    mnemonic = get_mnemonic(pc_addr)
+    mnemonic = get_mnemonic(ctx, pc_addr)
     output_string = ""
     ## opcode 0x77: JA, JNBE (jump if CF=0 and ZF=0)
     ## opcode 0x0F87: JNBE, JA
@@ -3889,9 +3870,9 @@ def dump_jumpx86(eflags):
     ## opcode 0xE3: JCXZ, JECXZ, JRCXZ (jump if CX=0 or ECX=0 or RCX=0)
     # XXX: we just need cx output...
     elif "jcxz" == mnemonic or "jecxz" == mnemonic or "jrcxz" == mnemonic:
-        rcx = get_gp_register("rcx")
-        ecx = get_gp_register("ecx")
-        cx = get_gp_register("cx")
+        rcx = get_gp_register(ctx, "rcx")
+        ecx = get_gp_register(ctx, "ecx")
+        cx = get_gp_register(ctx, "cx")
         if ecx == 0 or cx == 0 or rcx == 0:
             output_string = "Jump is taken (cx = 0 or ecx = 0 or rcx = 0)"
         else:
@@ -3983,12 +3964,12 @@ def dump_jumpx86(eflags):
 
     # XXX: we should just return a string and the caller should do this work instead
     if output_string:
-        if is_i386():
+        if is_i386(target):
             if "NOT" in output_string:
                 output(" " + COLOR_CONDITIONAL_NO + "=> {:s}".format(output_string) + RESET)
             else:
                 output(" " + COLOR_CONDITIONAL_YES + "=> {:s}".format(output_string) + RESET)
-        elif is_x64():
+        elif is_x64(target):
             if "NOT" in output_string:
                 output("  " + COLOR_CONDITIONAL_NO + "=> {:s}".format(output_string) + RESET)
             else:
@@ -4002,8 +3983,8 @@ def showreg64(reg, val):
     output(c + "0x%.016lX" % (val) + RESET)
     old_x64[reg] = val
 
-def reg64():
-    current = get_gp_registers()
+def reg64(ctx):
+    current = get_gp_registers(ctx)
     # first register line + rflags
     line = [ "rax", "rbx", "rbp", "rsp" ]
     for reg in line:
@@ -4038,7 +4019,7 @@ def reg64():
         r = current[reg]
         showreg64(reg, r)
     rflags = current["rflags"]
-    dump_jumpx86(rflags)
+    dump_jumpx86(ctx, rflags)
     output("\n")
 
     # last register line
@@ -4061,8 +4042,8 @@ def showreg32(reg, val):
     output(c + "0x%.08X" % (val) + RESET)
     old_x86[reg] = val
 
-def reg32():
-    current = get_gp_registers()
+def reg32(ctx):
+    current = get_gp_registers(ctx)
     # first register line + eflags
     line = ["eax", "ebx", "ecx", "edx"]
     for reg in line:
@@ -4091,7 +4072,7 @@ def reg32():
         old_x86[reg] = r
 
     eflags = current["eflags"]
-    dump_jumpx86(eflags)
+    dump_jumpx86(ctx, eflags)
     output("\n")
 
 def dump_cpsr(cpsr):
@@ -4120,8 +4101,8 @@ def dump_cpsr(cpsr):
             allFlags += flag.lower() + last
     return allFlags
 
-def regarm64():
-    current = get_gp_registers()
+def regarm64(ctx):
+    current = get_gp_registers(ctx)
     # register display order (4 columns)
     display = [
         ["x0", "x8",  "x16", "x24"],
@@ -4156,7 +4137,7 @@ def regarm64():
     old_arm64["pc"] = pc
     output(" ")
     cpsr = current["cpsr"]
-    taken, reason = dump_conditionalaarch64(cpsr)
+    taken, reason = dump_conditionalaarch64(ctx, cpsr)
     # add the () between the reason message
     if reason != "":
         reason = "({:s})".format(reason)
@@ -4171,13 +4152,14 @@ def regarm64():
     # XXX: should flags be always red? red in registers means they changed
     output(linefmt.format(flags, reason) + "\n")
 
-def print_registers():
-    if is_i386():
-        reg32()
-    elif is_x64():
-        reg64()
-    elif is_arm():
-        regarm64()
+def print_registers(ctx):
+    target = ctx.GetTarget()
+    if is_i386(target):
+        reg32(ctx)
+    elif is_x64(target):
+        reg64(ctx)
+    elif is_arm(target):
+        regarm64(ctx)
 
 # ------------------------------
 # Disassembler related functions
@@ -4188,34 +4170,34 @@ def print_registers():
     'disassemble' command ...
 """
 # XXX: help
-def cmd_DumpInstructions(debugger, command, result, dict):
+def cmd_DumpInstructions(debugger, command, ctx, result, dict):
     """Dump instructions at certain address (SoftICE like u command style)."""
     help = """ """
 
-    target = get_target()
+    target = ctx.GetTarget()
     cmd = command.split()
     if len(cmd) == 0 or len(cmd) > 2:
-        disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
+        disassemble(ctx, get_current_pc(ctx), CONFIG_DISASSEMBLY_LINE_COUNT)
     elif len(cmd) == 1:
-        address = evaluate(cmd[0])
+        address = evaluate(ctx, cmd[0])
         if address is None:
             return
-        disassemble(address, CONFIG_DISASSEMBLY_LINE_COUNT)
+        disassemble(ctx, address, CONFIG_DISASSEMBLY_LINE_COUNT)
     else:
-        address = evaluate(cmd[0])
+        address = evaluate(ctx, cmd[0])
         if address is None:
             return
-        count = evaluate(cmd[1])
+        count = evaluate(ctx, cmd[1])
         if count is None:
             return
-        disassemble(address, count)
+        disassemble(ctx, address, count)
 
     result.SetStatus(lldb.eReturnStatusSuccessFinishResult)
 
 # return the SBInstruction at input address
-def get_instruction(target_addr):
+def get_instruction(ctx, target_addr):
     err = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     # flavor argument only relevant to x86 targets - seems to work with ARM anyway
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
@@ -4224,9 +4206,9 @@ def get_instruction(target_addr):
     return instruction_list.GetInstructionAtIndex(0)
 
 # return the instruction mnemonic at input address
-def get_mnemonic(target_addr):
+def get_mnemonic(ctx, target_addr):
     err = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     # flavor argument only relevant to x86 targets - seems to work with ARM anyway
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
@@ -4239,9 +4221,9 @@ def get_mnemonic(target_addr):
     return mnemonic
 
 # returns the instruction operands
-def get_operands(src_address):
+def get_operands(ctx, src_address):
     err = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
     # use current memory address
     # needs to be this way to workaround SBAddress init bug
     src_sbaddr = lldb.SBAddress()
@@ -4254,9 +4236,9 @@ def get_operands(src_address):
     return cur_instruction.GetOperands(target)
 
 # find out the size of an instruction using internal disassembler
-def get_inst_size(target_addr):
+def get_inst_size(ctx, target_addr):
     err = lldb.SBError()
-    target = get_target()
+    target = ctx.GetTarget()
 
     instruction_list = target.ReadInstructions(lldb.SBAddress(target_addr, target), 1)
     if instruction_list.GetSize() == 0:
@@ -4268,8 +4250,8 @@ def get_inst_size(target_addr):
 
 # the disassembler we use on stop context
 # we can customize output here instead of using the cmdline as before and grabbing its output
-def disassemble(start_address, nrlines):
-    target = get_target()
+def disassemble(ctx, start_address, nrlines):
+    target = ctx.GetTarget()
     if target is None:
         return
     # this init will set a file_addr instead of expected load_addr
@@ -4297,8 +4279,13 @@ def disassemble(start_address, nrlines):
     # bug on SBAddress init implementation???
     # this also has problems with symbols - the memory version doesn't have them
     # flavor argument only relevant to x86 targets - works fine with ARM like this
+    if is_arm(target):
     instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines)
     instructions_file = target.ReadInstructions(file_sbaddr, nrlines)
+    else:
+        instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines, CONFIG_FLAVOR)
+        instructions_file = target.ReadInstructions(file_sbaddr, nrlines, CONFIG_FLAVOR)
+
     if instructions_mem.GetSize() != instructions_file.GetSize():
         err_msg("Instructions arrays sizes are different.")
         return
@@ -4313,7 +4300,7 @@ def disassemble(start_address, nrlines):
         if mnem_len > max_mnem_size:
             max_mnem_size = mnem_len
 
-    current_pc = get_current_pc()
+    current_pc = get_current_pc(ctx)
     # get info about module if there is a symbol
     module = file_sbaddr.module
     # module_name = module.file.GetFilename()
@@ -4396,7 +4383,7 @@ def disassemble(start_address, nrlines):
         # retrieve the base address of the module where the address belongs to
         # the comments offsets are relative to this
         # it's ok to use the module variable we got from file_sbaddr
-        inst_base = get_module_base(module)
+        inst_base = get_module_base(ctx, module)
         user_comment = ""
         if inst_base > 0 and g_sessiondata != {}:
             # not the most efficient way to do this but converting to hash table is going to increase complexity
@@ -4414,9 +4401,9 @@ def disassemble(start_address, nrlines):
             # try to retrieve extra information if it's a branch instruction
             # used to resolve indirect branches and try to extract Objective-C selectors
             if mem_inst.DoesBranch():
-                flow_addr = get_indirect_flow_address(mem_inst.GetAddress().GetLoadAddress(target))
+                flow_addr = get_indirect_flow_address(ctx, mem_inst.GetAddress().GetLoadAddress(target))
                 if flow_addr > 0:
-                    flow_module_name = get_module_name(flow_addr)
+                    flow_module_name = get_module_name(ctx, flow_addr)
                     symbol_info = ""
                     # try to solve the symbol for the target address
                     target_symbol_name = lldb.SBAddress(flow_addr, target).GetSymbol().GetName()
@@ -4437,7 +4424,7 @@ def disassemble(start_address, nrlines):
                 # and the selector string is there - the symbol name does contain the name
                 # so we can either extract it from here or read the information from the subroutine
                 # or not worth the trouble since the symbol name always has lots of info
-                className, selectorName = get_objectivec_selector(current_pc)
+                className, selectorName = get_objectivec_selector(ctx, current_pc)
                 if className != "":
                     if selectorName != "":
                         comment += " -> " + "[" + className + " " + selectorName + "]"
@@ -4464,7 +4451,7 @@ def disassemble(start_address, nrlines):
 # Commands that use external utilities
 # ------------------------------------
 
-def cmd_show_loadcmds(debugger, command, result, dict):
+def cmd_show_loadcmds(debugger, command, ctx, result, dict):
     """Show otool output of Mach-O load commands. Use \'show_loadcmds\' for more information."""
     help = {
         "cmd": "show_loadcmds",
@@ -4480,7 +4467,7 @@ def cmd_show_loadcmds(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        header_addr = evaluate(cmd[0])
+        header_addr = evaluate(ctx, cmd[0])
         if header_addr is None:
             err_msg("Invalid header address value.")
             help_msg(help)
@@ -4494,7 +4481,7 @@ def cmd_show_loadcmds(debugger, command, result, dict):
         err_msg("/usr/bin/otool not found. Please install Xcode or Xcode command line tools.")
         return
 
-    bytes_string = get_process().ReadMemory(header_addr, 4096 * 10, error)
+    bytes_string = ctx.GetProcess().ReadMemory(header_addr, 4096 * 10, error)
     if not error.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(header_addr))
         return
@@ -4511,7 +4498,7 @@ def cmd_show_loadcmds(debugger, command, result, dict):
 
     return
 
-def cmd_show_header(debugger, command, result, dict):
+def cmd_show_header(debugger, command, ctx, result, dict):
     """Show otool output of Mach-O header. Use \'show_header\' for more information."""
     help = {
         "cmd": "show_header",
@@ -4527,7 +4514,7 @@ def cmd_show_header(debugger, command, result, dict):
         if cmd[0] == "help":
            help_msg(help)
            return
-        header_addr = evaluate(cmd[0])
+        header_addr = evaluate(ctx, cmd[0])
         if header_addr is None:
             err_msg("Invalid header address value.")
             help_msg(help)
@@ -4543,7 +4530,7 @@ def cmd_show_header(debugger, command, result, dict):
 
     # recent otool versions will fail so we need to read a reasonable amount of memory
     # even just for the mach-o header
-    bytes_string = get_process().ReadMemory(header_addr, 4096 * 10, error)
+    bytes_string = ctx.GetProcess().ReadMemory(header_addr, 4096 * 10, error)
     if not error.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(header_addr))
         return
@@ -4579,7 +4566,7 @@ def assemble_keystone(arch, mode, code, syntax=0):
             output.append("{:02x}".format(i))
         print(" ".join(output))
 
-def cmd_asm32(debugger, command, result, dict):
+def cmd_asm32(debugger, command, ctx, result, dict):
     """32 bit x86 interactive Keystone based assembler. Use \'asm32 help\' for more information."""
     help = {
         "cmd": "asm32",
@@ -4611,7 +4598,7 @@ Keystone set to KS_ARCH_X86 and KS_MODE_32.""",
 
     assemble_keystone(keystone.KS_ARCH_X86, keystone.KS_MODE_32, inst_list)
 
-def cmd_asm64(debugger, command, result, dict):
+def cmd_asm64(debugger, command, ctx, result, dict):
     """64 bit x86 interactive Keystone based assembler. Use \'asm64 help\' for more information."""
     help = {
         "cmd": "asm64",
@@ -4643,7 +4630,7 @@ Keystone set to KS_ARCH_X86 and KS_MODE_64.""",
 
     assemble_keystone(keystone.KS_ARCH_X86, keystone.KS_MODE_64, inst_list)
 
-def cmd_arm32(debugger, command, result, dict):
+def cmd_arm32(debugger, command, ctx, result, dict):
     """32 bit ARM interactive Keystone based assembler. Use \'arm32 help\' for more information."""
     help = {
         "cmd": "arm32",
@@ -4675,7 +4662,7 @@ Keystone set to KS_ARCH_ARM and KS_MODE_ARM.""",
 
     assemble_keystone(keystone.KS_ARCH_ARM, keystone.KS_MODE_ARM, inst_list)
 
-def cmd_armthumb(debugger, command, result, dict):
+def cmd_armthumb(debugger, command, ctx, result, dict):
     """32 bit ARM Thumb interactive Keystone based assembler. Use \'armthumb help\' for more information."""
     help = {
         "cmd": "armthumb",
@@ -4707,7 +4694,7 @@ Keystone set to KS_ARCH_ARM and KS_MODE_THUMB.""",
 
     assemble_keystone(keystone.KS_ARCH_ARM, keystone.KS_MODE_THUMB, inst_list)
 
-def cmd_arm64(debugger, command, result, dict):
+def cmd_arm64(debugger, command, ctx, result, dict):
     """64 bit ARM interactive Keystone based assembler. Use \'arm64 help\' for more information."""
     help = {
         "cmd": "arm64",
@@ -4739,14 +4726,14 @@ Keystone set to KS_ARCH_ARM64 and KS_MODE_ARM.""",
 
     assemble_keystone(keystone.KS_ARCH_ARM64, keystone.KS_MODE_LITTLE_ENDIAN, inst_list)
 
-def display_stack():
+def display_stack(ctx):
     """Hex dump current stack pointer."""
-    stack_addr = get_current_sp()
+    stack_addr = get_current_sp(ctx)
     if stack_addr == 0:
         return
     err = lldb.SBError()
-    target = get_target()
-    membuf = get_process().ReadMemory(stack_addr, 0x100, err)
+    target = ctx.GetTarget()
+    membuf = ctx.GetProcess().ReadMemory(stack_addr, 0x100, err)
     if not err.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(stack_addr))
         return
@@ -4755,15 +4742,14 @@ def display_stack():
         return
     output(hexdump(stack_addr, membuf, " ", 16, 4))
 
-def display_data():
+def display_data(ctx):
     """Hex dump current data window pointer."""
     data_addr = DATA_WINDOW_ADDRESS
     print(data_addr)
     if data_addr == 0:
         return
     err = lldb.SBError()
-    target = get_target()
-    membuf = get_process().ReadMemory(data_addr, 0x100, err)
+    membuf = ctx.GetProcess().ReadMemory(data_addr, 0x100, err)
     if not err.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(data_addr))
         return
@@ -4773,17 +4759,17 @@ def display_data():
     output(hexdump(data_addr, membuf, " ", 16, 4))
 
 # workaround for lldb bug regarding RIP addressing outside main executable
-def get_rip_relative_addr(src_address):
+# XXX: unused
+def get_rip_relative_addr(ctx, src_address):
     err = lldb.SBError()
-    target = get_target()
-    inst_size = get_inst_size(src_address)
+    inst_size = get_inst_size(ctx, src_address)
     if inst_size <= 1:
         err_msg("The instruction size is too small.")
         return 0
     # XXX: problem because it's not just 2 and 5 bytes
     # 0x7fff53fa2180 (0x1180): 0f 85 84 01 00 00     jne    0x7fff53fa230a ; stack_not_16_byte_aligned_error
 
-    offset_bytes = get_process().ReadMemory(src_address + 1, inst_size - 1, err)
+    offset_bytes = ctx.GetProcess().ReadMemory(src_address + 1, inst_size - 1, err)
     if not err.Success():
         err_msg("Failed to read memory at 0x{:x}.".format(src_address))
         return 0
@@ -4797,10 +4783,10 @@ def get_rip_relative_addr(src_address):
 
 # find out the target address of an indirect instruction
 # such as memory references and registers but also RIP relative calls
-def get_indirect_flow_target(src_address):
+def get_indirect_flow_target(ctx, src_address):
     err = lldb.SBError()
-    operand = get_operands(src_address).lower()
-    mnemonic = get_mnemonic(src_address)
+    operand = get_operands(ctx, src_address).lower()
+    mnemonic = get_mnemonic(ctx, src_address)
     # XXX: check allowed instructions here ?
 
     # calls into a deferenced memory address (intel only)
@@ -4817,18 +4803,18 @@ def get_indirect_flow_target(src_address):
         # we need to transform the register into a variable
         # register + offset cases
         if z.group(1).startswith("r") or z.group(1).startswith("e"):
-            value = get_frame().EvaluateExpression("$" + z.group(1))
+            value = ctx.GetFrame().EvaluateExpression("$" + z.group(1))
         # only offset
         else:
-            value = get_frame().EvaluateExpression(z.group(1))
+            value = ctx.GetFrame().EvaluateExpression(z.group(1))
 
         if not value.IsValid():
             return 0
         deref_addr = int(value.GetValue(), 10)
         if "rip" in operand:
-            deref_addr = deref_addr + get_inst_size(src_address)
+            deref_addr = deref_addr + get_inst_size(ctx, src_address)
         # simpler than using ReadUnsignedFromMemory()
-        call_target_addr = get_process().ReadPointerFromMemory(deref_addr, err)
+        call_target_addr = ctx.GetProcess().ReadPointerFromMemory(deref_addr, err)
         if err.Success():
             return call_target_addr
         else:
@@ -4855,7 +4841,7 @@ def get_indirect_flow_target(src_address):
             # https://googleprojectzero.blogspot.com/2019/02/examining-pointer-authentication-on.html
             # talks about higher number of bits for iOS
         # XXX: why use the evaluate expression if we can extract the register directly?
-        value = get_frame().EvaluateExpression("$" + operand)
+        value = ctx.GetFrame().EvaluateExpression("$" + operand)
         if not value.IsValid():
             return 0
         ret = int(value.GetValue(), 10)
@@ -4874,13 +4860,13 @@ def get_indirect_flow_target(src_address):
             return int(x.group(1), 16)
     return 0
 
-def get_ret_address(pc_addr):
-    if is_arm():
-        target = get_target()
-        instruction = get_instruction(pc_addr)
+def get_ret_address(ctx, pc_addr):
+    target = ctx.GetTarget()
+    if is_arm(target):
+        instruction = get_instruction(ctx, pc_addr)
         mnemonic = instruction.GetMnemonic(target)
         operands = instruction.GetOperands(target)
-        lr = get_gp_register("lr")
+        lr = get_gp_register(ctx, "lr")
         if lr == 0:
             err_msg("Failed to retrieve LR register.")
             return -1
@@ -4891,7 +4877,7 @@ def get_ret_address(pc_addr):
                 return lr
             # 20 00 5f d6 - ret x1
             elif operands.startswith("x") and len(operands) <= 3:
-                ret = get_gp_register(operands)
+                ret = get_gp_register(ctx, operands)
                 return ret
             else:
                 err_msg("More than one operand in ret instruction.")
@@ -4902,19 +4888,19 @@ def get_ret_address(pc_addr):
             return lr
     else:
         err = lldb.SBError()
-        stack_addr = get_current_sp()
+        stack_addr = get_current_sp(ctx)
         if stack_addr == 0:
             return -1
-        ret_addr = get_process().ReadPointerFromMemory(stack_addr, err)
+        ret_addr = ctx.GetProcess().ReadPointerFromMemory(stack_addr, err)
         if not err.Success():
             err_msg("Failed to read memory at 0x{:x}.".format(stack_addr))
             return -1
         return ret_addr
 
-def is_sending_objc_msg():
+def is_sending_objc_msg(ctx):
     err = lldb.SBError()
-    target = get_target()
-    call_addr = get_indirect_flow_target(get_current_pc())
+    target = ctx.GetTarget()
+    call_addr = get_indirect_flow_target(ctx, get_current_pc(ctx))
     sym_addr = lldb.SBAddress(call_addr, target)
     symbol = sym_addr.GetSymbol()
     # XXX: add others?
@@ -4922,26 +4908,26 @@ def is_sending_objc_msg():
 
 # displays the contents of the flow window (disabled by default)
 # pretty much information about indirect references and objective-c where available
-def display_indirect_flow():
-    target = get_target()
-    pc_addr = get_current_pc()
-    mnemonic = get_mnemonic(pc_addr)
+def display_indirect_flow(ctx):
+    target = ctx.GetTarget()
+    pc_addr = get_current_pc(ctx)
+    mnemonic = get_mnemonic(ctx, pc_addr)
 
     # x86 and arm64 (including pac versions)
     if mnemonic.startswith("ret"):
-        indirect_addr = get_ret_address(pc_addr)
+        indirect_addr = get_ret_address(ctx, pc_addr)
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
         output("\n")
         return
 
     if mnemonic in ("call", "callq", "jmp", "br", "bl", "b", "braa", "braaz", "brab", "brabz", "blraa", "blraaz", "blrab", "blrabz"):
         # we need to identify the indirect target address
-        indirect_addr = get_indirect_flow_target(pc_addr)
+        indirect_addr = get_indirect_flow_target(ctx, pc_addr)
         output("0x%x -> %s" % (indirect_addr, lldb.SBAddress(indirect_addr, target).GetSymbol().name))
 
         if is_sending_objc_msg():
             output("\n")
-            className, selectorName = get_objectivec_selector(pc_addr)
+            className, selectorName = get_objectivec_selector(ctx, pc_addr)
             if className != "":
                 output(RED + "Class: " + RESET)
                 output(className)
@@ -4952,8 +4938,8 @@ def display_indirect_flow():
     return
 
 # find out the target address of ret, and indirect call and jmp
-def get_indirect_flow_address(src_addr):
-    target = get_target()
+def get_indirect_flow_address(ctx, src_addr):
+    target = ctx.GetTarget()
     instruction_list = target.ReadInstructions(lldb.SBAddress(src_addr, target), 1)
     if instruction_list.GetSize() == 0:
         err_msg("Not enough instructions disassembled.")
@@ -4964,24 +4950,24 @@ def get_indirect_flow_address(src_addr):
         return -1
 
     if cur_instruction.GetMnemonic(target).startswith("ret"):
-        ret_addr = get_ret_address(src_addr)
+        ret_addr = get_ret_address(ctx, src_addr)
         return ret_addr
     elif cur_instruction.GetMnemonic(target) in ("call", "jmp"):
         # don't care about RIP relative jumps
         if cur_instruction.GetOperands(target).startswith("0x"):
             return -1
-        indirect_addr = get_indirect_flow_target(src_addr)
+        indirect_addr = get_indirect_flow_target(ctx, src_addr)
         return indirect_addr
     elif cur_instruction.GetMnemonic(target) in ("br", "blr", "braa", "braaz", "brab", "brabz", "blraa", "blraaz", "blrab", "blrabz"):
-        indirect_addr = get_indirect_flow_target(src_addr)
+        indirect_addr = get_indirect_flow_target(ctx, src_addr)
         return indirect_addr
 
     # all other branches just return -1
     return -1
 
 # retrieve the module full path name an address belongs to
-def get_module_name(src_addr):
-    target = get_target()
+def get_module_name(ctx, src_addr):
+    target = ctx.GetTarget()
     src_module = lldb.SBAddress(src_addr, target).module
     module_name = src_module.file.fullpath
     if module_name is None:
@@ -4990,16 +4976,16 @@ def get_module_name(src_addr):
         return module_name
 
 # tries to retrieve the class name of object being sent a message and the selector
-def get_objectivec_selector(src_addr):
+def get_objectivec_selector(ctx, src_addr):
     options = lldb.SBExpressionOptions()
     options.SetLanguage(lldb.eLanguageTypeObjC)
     options.SetTrapExceptions(False)
 
     err = lldb.SBError()
-    target = get_target()
-    process = get_process()
+    target = ctx.GetTarget()
+    proc = ctx.GetProcess()
 
-    call_addr = get_indirect_flow_target(src_addr)
+    call_addr = get_indirect_flow_target(ctx, src_addr)
     if call_addr == 0:
         return "", ""
 
@@ -5015,8 +5001,8 @@ def get_objectivec_selector(src_addr):
     # expr -- (void)printf("[%s, %s]\n",(char *) object_getClassName(*(long*)($rdi)), (char *) *(long *)($rsi) )
     # if the target isn't compiled with obj-c information we get this error and crash (-ObjC option to the compiler)
     # warning: could not execute support code to read Objective-C class data in the process. This may reduce the quality of type information available.
-    classname_command = "(const char *)object_getClassName((id){})".format(get_instance_object())
-    classname_value = get_frame().EvaluateExpression(classname_command)
+    classname_command = "(const char *)object_getClassName((id){})".format(get_instance_object(ctx))
+    classname_value = ctx.GetFrame().EvaluateExpression(classname_command)
     # IsValid() doesn't seem that useful because if there is an error it still returns true
     # we can check the error property or the size of the data for example
     # https://lldb.llvm.org/python_api/lldb.SBValue.html?highlight=sbvalue
@@ -5024,21 +5010,21 @@ def get_objectivec_selector(src_addr):
         return "", ""
     className = classname_value.GetSummary().strip('"')
     # get pointer to selector string
-    if is_x64():
-        selector_addr = get_gp_register("rsi")
-    elif is_arm():
-        selector_addr = get_gp_register("x1")
-    elif is_i386:
+    if is_x64(target):
+        selector_addr = get_gp_register(ctx, "rsi")
+    elif is_arm(target):
+        selector_addr = get_gp_register(ctx, "x1")
+    elif is_i386(target):
         # selector pointer is at esp+4
-        src = get_gp_register("esp")
+        src = get_gp_register(ctx, "esp")
         src += 4
-        selector_addr = process.ReadPointerFromMemory(src, err)
+        selector_addr = proc.ReadPointerFromMemory(src, err)
         if not err.Success():
             err_msg("Failed to read selector address from 0x{:x}.".format(src))
             return className, ""
     # XXX: verify that address makes some sense?
     # read selector string
-    methodName = process.ReadCStringFromMemory(selector_addr, 0x100, err)
+    methodName = proc.ReadCStringFromMemory(selector_addr, 0x100, err)
     if not err.Success():
         err_msg("Failed to read selector string from 0x{:x}.".format(selector_addr))
         # XXX: do we need to return here or methodName is empty?
@@ -5052,7 +5038,7 @@ def get_objectivec_selector(src_addr):
 #  CUSTOM COMMANDS
 # -----------------
 
-def cmd_fixret(debugger, command, result, dict):
+def cmd_fixret(debugger, command, ctx, result, dict):
     """Fix return breakpoint. Use \'fixret help\' for more information."""
     help = {
     "cmd": "fixret",
@@ -5065,41 +5051,41 @@ def cmd_fixret(debugger, command, result, dict):
         help_msg(help)
         return
 
-    target = get_target()
-    frame = get_frame()
+    target = ctx.GetTarget()
+    frame = ctx.GetFrame()
     if frame is None:
         return
     thread = frame.GetThread()
     rsp = int(frame.FindRegister("rsp").GetValue(), 16)
     # print(hex(rsp))
     error = lldb.SBError()
-    ret_addr = get_process().ReadUnsignedFromMemory(rsp, 8, error)
+    ret_addr = ctx.GetProcess().ReadUnsignedFromMemory(rsp, 8, error)
     if not error.Success():
         err_msg("Failed to read RSP.")
         return
     # print("[DEBUG] return address is {0}".format(hex(ret_addr)))
-    get_frame().reg["rip"].value = format(ret_addr, "#x")
+    frame.reg["rip"].value = format(ret_addr, "#x")
     rsp = rsp + 0x8
-    get_frame().reg["rsp"].value = format(rsp, "#x")
+    frame.reg["rsp"].value = format(rsp, "#x")
     if len(cmd) == 0:
-        get_process().Continue()
+        ctx.GetProcess().Continue()
 
 # return the module to which an address belongs to
 # XXX: duplicate of get_module_name()
-def aux_find_module(address):
-    target = get_target()
+def aux_find_module(ctx, address):
+    target = ctx.GetTarget()
     addr = lldb.SBAddress(address, target)
     module = addr.module
     if DEBUG:
         print(module.file.basename, module.file.fullpath)
     return module
 
-def get_module_base(module):
+def get_module_base(ctx, module):
     if module is None:
         return -1
     if module.num_sections == 0:
         return -1
-    target = get_target()
+    target = ctx.GetTarget()
     # if __PAGEZERO exists it returns -1 for the value
     if module.sections[0].GetLoadAddress(target) != 0xFFFFFFFFFFFFFFFF:
         return module.sections[0].GetLoadAddress(target)
@@ -5107,14 +5093,14 @@ def get_module_base(module):
     else:
         return module.sections[1].GetLoadAddress(target)
 
-def get_module_offset(address, module):
-    target = get_target()
+def get_module_offset(ctx, address, module):
+    target = ctx.GetTarget()
     addr = lldb.SBAddress(address, target)
     segment_nr = 0
-    base = get_module_base(module)
+    base = get_module_base(ctx, module)
     return addr.GetLoadAddress(target) - base
 
-def cmd_addcomment(debugger, command, result, dict):
+def cmd_addcomment(debugger, command, ctx, result, dict):
     """Add comment to address. Use \'acm help\' for more information."""
     help = {
         "cmd": "acm",
@@ -5144,15 +5130,15 @@ def cmd_addcomment(debugger, command, result, dict):
 
     # XXX: the value can be anything but if it doesn't match a disassembly address it will not be displayed
     #      kind of not our problem - we could solve to nearest address but maybe waste of time anyway
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
         return
 
     # check if it's a dupe - we just update comment in that case
-    module = aux_find_module(value)
-    offset = get_module_offset(value, module)
+    module = aux_find_module(ctx, value)
+    offset = get_module_offset(ctx, value, module)
     mod_uuid = module.GetUUIDString().lower()
     found = None
     if len(g_sessiondata["comments"]) > 0:
@@ -5181,7 +5167,7 @@ def cmd_addcomment(debugger, command, result, dict):
     if DEBUG:
         print(g_sessiondata)
 
-def cmd_delcomment(debugger, command, result, dict):
+def cmd_delcomment(debugger, command, ctx, result, dict):
     """Delete comment to address. Use \'dcm help\' for more information."""
     help = {
         "cmd": "dcm",
@@ -5205,7 +5191,7 @@ def cmd_delcomment(debugger, command, result, dict):
         err_msg("[-] Please start the target before using this command.")
         return
 
-    value = evaluate(cmd[0])
+    value = evaluate(ctx, cmd[0])
     if value is None:
         err_msg("Invalid input value.")
         help_msg(help)
@@ -5213,8 +5199,8 @@ def cmd_delcomment(debugger, command, result, dict):
 
     # we don't verify if the address exists - kind of waste of time
     # we also assume there are no dupes since add shouldn't let it happen
-    module = aux_find_module(value)
-    offset = get_module_offset(value, module)
+    module = aux_find_module(ctx, value)
+    offset = get_module_offset(ctx, value, module)
     mod_uuid = module.GetUUIDString().lower()
     for i in g_sessiondata["comments"]:
         if (i["uuid"] == mod_uuid) and (i["offset"] == hex(offset)):
@@ -5223,7 +5209,7 @@ def cmd_delcomment(debugger, command, result, dict):
             return
 
 # XXX: to get an address we would need to resolve each module, find the base and add the offset
-def cmd_listcomments(debugger, command, result, dict):
+def cmd_listcomments(debugger, command, ctx, result, dict):
     """List comments. Use \'lcm help\' for more information."""
     help = {
         "cmd": "lcm",
@@ -5246,9 +5232,9 @@ def cmd_listcomments(debugger, command, result, dict):
 
 # hash the r-x region of the target process - this should be enough for the database purposes
 # x64dbg hashes the memory with murmurhash
-def hash_target():
-    process = get_process()
-    regions = process.GetMemoryRegions()
+def hash_target(ctx):
+    proc = ctx.GetProcess()
+    regions = proc.GetMemoryRegions()
     if regions.GetSize() < 1:
         err_msg("Invalid memory region.")
         return ""
@@ -5258,7 +5244,7 @@ def hash_target():
     start = reg.GetRegionBase()
     end = reg.GetRegionEnd()
     # software breakpoints don't show up here so it's safe to hash the process memory
-    membuf = process.ReadMemory(start, end - start, error)
+    membuf = proc.ReadMemory(start, end - start, error)
     hash_obj = hashlib.sha256(membuf)
     if DEBUG:
         print(hash_obj.hexdigest())
@@ -5291,7 +5277,7 @@ def save_json_session(target):
 # save the breakpoint session
 # the BreakpointsWriteToFile() from API doesn't work since it doesn't save all information
 # the restore from the file doesn't work because of missing addresses
-def cmd_save_session(debugger, command, result, dict):
+def cmd_save_session(debugger, command, ctx, result, dict):
     """Save breakpoint session. Use \'ss help\' for more information."""
     help = {
         "cmd": "ss",
@@ -5338,7 +5324,7 @@ def cmd_save_session(debugger, command, result, dict):
     # for dyld we obtain an address without the base
     # for an object we obtain the full base address without aslr
     # we should just store offset to the image and then restore using current information
-    target = get_target()
+    target = ctx.GetTarget()
     # list all current breakpoints and store them
     for bpt in target.breakpoint_iter():
         # XXX: we need to iterate all locations of each breakpoint... geezzzzzz
@@ -5453,7 +5439,7 @@ def cmd_save_session(debugger, command, result, dict):
     save_json_session(g_sessionfile)
 
 # restore the breakpoint session
-def cmd_restore_session(debugger, command, result, dict):
+def cmd_restore_session(debugger, command, ctx, result, dict):
     """Restore breakpoint session. Use \'rs help\' for more information."""
     help = {
         "cmd": "rs",
@@ -5488,7 +5474,7 @@ def cmd_restore_session(debugger, command, result, dict):
         return
 
     res = lldb.SBCommandReturnObject()
-    target = get_target()
+    target = ctx.GetTarget()
     # build dictionary of all loaded modules
     modules = {}
     for m in target.module_iter():
@@ -5567,7 +5553,7 @@ def cmd_restore_session(debugger, command, result, dict):
 # list all the available breakpoint sessions
 # XXX: we can't display the target addresses because we don't store that information
 # this is a bit annoying since it's hard to keep track of what is what until they are restored
-def cmd_list_sessions(debugger, command, result, dict):
+def cmd_list_sessions(debugger, command, ctx, result, dict):
     """List breakpoint sessions. Use \'ss help\' for more information."""
     help = {
         "cmd": "ls",
@@ -5603,7 +5589,7 @@ def cmd_list_sessions(debugger, command, result, dict):
 
 # we hook this so we have a chance to initialize/reset some stuff when targets are (re)run
 # also modify to stop at entry point since we can't set breakpoints before
-def cmd_run(debugger, command, result, dict):
+def cmd_run(debugger, command, ctx, result, dict):
     """Run the target and stop at entry. Everything else after the command is considered target arguments."""
     help = {
         "cmd": "r",
@@ -5630,7 +5616,7 @@ def cmd_run(debugger, command, result, dict):
 #  The heart of lldbinit - when lldb stop this is where we land
 # --------------------------------------------------------------
 
-def HandleProcessLaunchHook(debugger, command, result, dict):
+def HandleProcessLaunchHook(debugger, command, ctx, result, dict):
     print("Hello World!!!")
     return 0
 
@@ -5641,7 +5627,7 @@ def HandleProcessLaunchHook(debugger, command, result, dict):
 # one idea could be to define a hook on dyld_start that gets hit when we use
 # process launch -s
 # this would allow us to initialize everything only once but potentially conflict with user workflow
-def HandleHookStopOnTarget(debugger, command, result, dict):
+def HandleHookStopOnTarget(debugger, command, ctx, result, dict):
     """Display current code context."""
     global g_current_target
     global g_sessiondata
@@ -5659,8 +5645,13 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     if os.getenv("PATH").startswith("/Applications/Xcode"):
         return
 
-    target = get_target()
+    target = ctx.GetTarget()
     exe = target.executable
+    # skip internal breakpoints - they have a negative stop reason
+    # that shows up as large numbers because it's uint64_t in the API
+    if ctx.GetThread().GetStopReasonDataCount() > 0:
+        if ctx.GetThread().GetStopReasonDataAtIndex(0) > 0xFFFFFFFFFFFFFFFF/2:
+            return
     # XXX: there is a bug with older version where this hook is triggered on attach
     #      but the memory regions are still empty here
     #      in newer versions this doesn't occur because the hook doesn't trigger on attach (and executing "context" command works ok)
@@ -5674,7 +5665,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
     # issuing the get memory regions on every stop has huge performance penalty on newer xcode versions (at least with Xcode 15.4)
     # XXX: needs more versions tested to find out where is the true cut off version
     if LLDB_VARIANT == "apple" and LLDB_MAJOR <= 1000:
-        if get_process().GetMemoryRegions().GetSize() == 0:
+        if ctx.GetProcess().GetMemoryRegions().GetSize() == 0:
             print("[!] Attaching to process and memory regions info still not available. Use 'context' command to display current state.\n")
             return
 
@@ -5691,7 +5682,7 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
         # one side effect (positive?) is that we don't have hash conflicts
         # since if there is hash mismatch the db file doesn't exist
         # x64dbg uses name instead and deals with the mismatches
-        g_target_hash = hash_target()
+        g_target_hash = hash_target(ctx)
         g_sessionfile = g_home + "/.lldb/" + g_target_hash + ".json"
         # load for a known target
         if os.path.exists(g_sessionfile):
@@ -5723,23 +5714,23 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
                 print(g_sessiondata)
 
     # the separator strings based on configuration and target arch
-    if is_i386():
+    if is_i386(target):
         top_sep = SEPARATOR * I386_TOP_SIZE
         header_sep = SEPARATOR * I386_HEADER_SIZE
         stack_sep = SEPARATOR * I386_STACK_SIZE
         bottom_sep = SEPARATOR * I386_BOTTOM_SIZE
-    elif is_x64():
+    elif is_x64(target):
         top_sep = SEPARATOR * X64_TOP_SIZE
         header_sep = SEPARATOR * X64_HEADER_SIZE
         stack_sep = SEPARATOR * X64_STACK_SIZE
         bottom_sep = SEPARATOR * X64_BOTTOM_SIZE
-    elif is_arm():
+    elif is_arm(target):
         header_sep = SEPARATOR * ARM_HEADER_SIZE
         top_sep = SEPARATOR * ARM_TOP_SIZE
         stack_sep = SEPARATOR * ARM_STACK_SIZE
         bottom_sep = SEPARATOR * ARM_BOTTOM_SIZE
     else:
-        arch = get_arch()
+        arch = get_arch(target)
         err_msg("Unknown and unsupported architecture : " + arch)
         return
 
@@ -5747,19 +5738,19 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
 
     # when we start the thread is still not valid and get_frame() will always generate a warning
     # this way we avoid displaying it in this particular case
-    if get_process().GetNumThreads() == 1:
-        thread = get_process().GetThreadAtIndex(0)
+    if ctx.GetProcess().GetNumThreads() == 1:
+        thread = ctx.GetProcess().GetThreadAtIndex(0)
         if not thread.IsValid():
             return
 
-    frame = get_frame()
+    frame = ctx.GetFrame()
     if not frame:
         return
 
     # XXX: this has a small bug - if we reload the script and try commands that depend on POINTER_SIZE
     # they will use the default value instead of the target until the context command is issued
     # or this hook is called
-    POINTER_SIZE = get_pointer_size()
+    POINTER_SIZE = get_pointer_size(ctx)
 
     # if we stopped because of a breakpoint try to extract which was it so we can display the name if it exists
     bp_name = ""
@@ -5790,34 +5781,34 @@ def HandleHookStopOnTarget(debugger, command, result, dict):
                 # we assume there is only one breakpoint name
                 bp_name = names.GetStringAtIndex(0)
 
-    output(COLOR_SEPARATOR + "[ TiD:{:^3d} ]".format(thread.GetIndexID()))
+    output(COLOR_SEPARATOR + "[ TiD:{:>3d} ]".format(thread.GetIndexID()))
     output(COLOR_SEPARATOR + header_sep)
 
     output(BOLD + "[regs]\n" + RESET)
-    print_registers()
+    print_registers(ctx)
 
     if CONFIG_DISPLAY_STACK_WINDOW == 1:
         output(COLOR_SEPARATOR + stack_sep)
         output(BOLD + "[stack]\n" + RESET)
-        display_stack()
+        display_stack(ctx)
         output("\n")
 
     if CONFIG_DISPLAY_DATA_WINDOW == 1:
         output(COLOR_SEPARATOR + top_sep)
         output(BOLD + "[data]\n" + RESET)
-        display_data()
+        display_data(ctx)
         output("\n")
 
     if CONFIG_DISPLAY_FLOW_WINDOW == 1:
         output(COLOR_SEPARATOR + top_sep)
         output(BOLD + "[flow]\n" + RESET)
-        display_indirect_flow()
+        display_indirect_flow(ctx)
 
     output(COLOR_SEPARATOR + top_sep)
     output(BOLD + "[code]\n" + RESET)
 
     # disassemble and add its contents to output inside
-    disassemble(get_current_pc(), CONFIG_DISASSEMBLY_LINE_COUNT)
+    disassemble(ctx, get_current_pc(ctx), CONFIG_DISASSEMBLY_LINE_COUNT)
     output(COLOR_SEPARATOR + bottom_sep + RESET)
     # XXX: find a better place for this - or maybe not
     if bp_name != "":
