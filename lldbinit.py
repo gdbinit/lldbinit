@@ -4280,8 +4280,8 @@ def disassemble(ctx, start_address, nrlines):
     # this also has problems with symbols - the memory version doesn't have them
     # flavor argument only relevant to x86 targets - works fine with ARM like this
     if is_arm(target):
-    instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines)
-    instructions_file = target.ReadInstructions(file_sbaddr, nrlines)
+        instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines)
+        instructions_file = target.ReadInstructions(file_sbaddr, nrlines)
     else:
         instructions_mem = target.ReadInstructions(mem_sbaddr, nrlines, CONFIG_FLAVOR)
         instructions_file = target.ReadInstructions(file_sbaddr, nrlines, CONFIG_FLAVOR)
